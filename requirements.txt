@@ -1,0 +1,9 @@
+Django
+djangorestframework
+django-cors-headers
+Pillow
+openai
+channels
+daphne
+requests>=2.31.0
+python-dotenv

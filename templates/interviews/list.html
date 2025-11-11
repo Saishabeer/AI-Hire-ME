@@ -1,0 +1,88 @@
+{% extends 'base.html' %}
+
+{% block title %}Interviews - AI Interviewer{% endblock %}
+
+{% block content %}
+<div class="space-y-8">
+    <!-- Header -->
+    <div class="bg-white rounded-lg shadow-lg p-6">
+        <h1 class="text-3xl font-bold text-gray-900 mb-2">
+            <i class="fas fa-list-alt text-purple-600 mr-2"></i>Interview Forms
+        </h1>
+        <p class="text-gray-600">Create and manage AI-powered interview forms</p>
+    </div>
+
+    <!-- User's Interviews -->
+    {% if user.is_authenticated and user_interviews %}
+    <div class="bg-white rounded-lg shadow-lg p-6">
+        <h2 class="text-2xl font-bold text-gray-900 mb-4">
+            <i class="fas fa-user-tie text-blue-600 mr-2"></i>My Interviews
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {% for interview in user_interviews %}
+            <div class="bg-gradient-to-br from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-6 hover:shadow-xl transition">
+                <div class="flex justify-between items-start mb-4">
+                    <h3 class="text-xl font-bold text-gray-900">{{ interview.title }}</h3>
+                    <span class="{% if interview.is_active %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %} text-xs font-medium px-2.5 py-0.5 rounded">
+                        {% if interview.is_active %}Active{% else %}Inactive{% endif %}
+                    </span>
+                </div>
+                <p class="text-gray-700 mb-4 line-clamp-2">{{ interview.description|truncatewords:15 }}</p>
+                <div class="text-sm text-gray-500 mb-4">
+                    <i class="fas fa-calendar mr-1"></i>{{ interview.created_at|date:"M d, Y" }}
+                    <span class="mx-2">•</span>
+                    <i class="fas fa-question-circle mr-1"></i>{{ interview.questions.count }} questions
+                </div>
+                <div class="flex space-x-2">
+                    <a href="{% url 'interviews:edit' interview.pk %}" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium text-center transition">
+                        <i class="fas fa-edit mr-1"></i>Edit
+                    </a>
+                    <a href="{% url 'interviews:responses' interview.pk %}" class="flex-1 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium text-center transition">
+                        <i class="fas fa-chart-bar mr-1"></i>Responses
+                    </a>
+                    <a href="{% url 'interviews:ai_interview' interview.pk %}" class="flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium text-center transition">
+                        <i class="fas fa-robot mr-1"></i>AI Interview
+                    </a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- All Interviews -->
+    <div class="bg-white rounded-lg shadow-lg p-6">
+        <h2 class="text-2xl font-bold text-gray-900 mb-4">
+            <i class="fas fa-globe text-green-600 mr-2"></i>Available Interviews
+        </h2>
+        {% if interviews %}
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {% for interview in interviews %}
+            <div class="bg-gradient-to-br from-green-50 to-blue-50 border border-green-200 rounded-lg p-6 hover:shadow-xl transition">
+                <h3 class="text-xl font-bold text-gray-900 mb-2">{{ interview.title }}</h3>
+                <p class="text-gray-700 mb-4 line-clamp-2">{{ interview.description|truncatewords:15 }}</p>
+                <div class="text-sm text-gray-500 mb-4">
+                    <i class="fas fa-user mr-1"></i>{{ interview.created_by.username }}
+                    <span class="mx-2">•</span>
+                    <i class="fas fa-question-circle mr-1"></i>{{ interview.questions.count }} questions
+                </div>
+                <a href="{% url 'interviews:ai_interview' interview.pk %}" class="block w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white px-4 py-3 rounded-lg text-sm font-medium text-center transition shadow-lg">
+                    <i class="fas fa-play mr-2"></i>Start Interview
+                </a>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-12">
+            <i class="fas fa-inbox text-gray-400 text-6xl mb-4"></i>
+            <p class="text-gray-500 text-lg">No interviews available yet</p>
+            {% if user.is_authenticated %}
+            <a href="{% url 'interviews:create' %}" class="inline-block mt-4 bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg font-medium transition">
+                <i class="fas fa-plus-circle mr-2"></i>Create Your First Interview
+            </a>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

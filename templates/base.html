@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}AI Interview{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+    <nav class="bg-gray-800 border-b border-gray-700">
+        <div class="max-w-7xl mx-auto px-6 py-4">
+            <div class="flex justify-between items-center">
+                <a href="{% url 'interviews:list' %}" class="text-xl font-bold hover:text-purple-400">
+                    <i class="fas fa-microphone-alt mr-2"></i>AI Interview
+                </a>
+                <div class="flex items-center space-x-6">
+                    {% if user.is_authenticated %}
+                        <a href="{% url 'interviews:create' %}" class="hover:text-purple-400">Create</a>
+                        <a href="{% url 'admin:index' %}" class="hover:text-purple-400">Admin</a>
+                        <span class="text-gray-400">{{ user.username }}</span>
+                        <a href="{% url 'accounts:logout' %}" class="hover:text-red-400">Logout</a>
+                    {% else %}
+                        <a href="{% url 'accounts:login' %}" class="hover:text-purple-400">Login</a>
+                        <a href="{% url 'accounts:register' %}" class="bg-purple-600 px-4 py-2 rounded hover:bg-purple-700">Register</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    {% if messages %}
+    <div class="max-w-7xl mx-auto px-6 mt-4">
+        {% for message in messages %}
+        <div class="{% if message.tags == 'error' %}bg-red-900 border-red-700{% elif message.tags == 'success' %}bg-green-900 border-green-700{% else %}bg-blue-900 border-blue-700{% endif %} border-l-4 p-4 mb-4 rounded">
+            {{ message }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <main class="max-w-7xl mx-auto px-6 py-8">
+        {% block content %}{% endblock %}
+    </main>
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

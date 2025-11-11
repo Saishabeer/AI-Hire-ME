@@ -1,0 +1,308 @@
+{% extends 'base.html' %}
+
+{% block title %}Edit Interview - AI Interviewer{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <!-- Hidden CSRF Token for AJAX -->
+    {% csrf_token %}
+    
+    <!-- Header -->
+    <div class="bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg shadow-lg p-6 mb-6">
+        <h1 class="text-3xl font-bold mb-2">
+            <i class="fas fa-edit mr-2"></i>{{ interview.title }}
+        </h1>
+        <p class="opacity-90">{{ interview.description }}</p>
+        <div class="flex space-x-4 mt-4">
+            <a href="{% url 'interviews:preview' interview.pk %}" class="bg-white text-purple-600 px-4 py-2 rounded-lg font-medium hover:bg-gray-100 transition">
+                <i class="fas fa-eye mr-2"></i>Preview Form
+            </a>
+            <a href="{% url 'interviews:responses' interview.pk %}" class="bg-white text-purple-600 px-4 py-2 rounded-lg font-medium hover:bg-gray-100 transition">
+                <i class="fas fa-chart-bar mr-2"></i>View Responses
+            </a>
+        </div>
+    </div>
+
+    <!-- Questions -->
+    <div id="questions-container" class="space-y-4">
+        {% for question in questions %}
+        <div class="bg-white rounded-lg shadow-lg p-6 question-card" data-question-id="{{ question.id }}">
+            <div class="flex justify-between items-start mb-4">
+                <input 
+                    type="text" 
+                    value="{{ question.question_text }}"
+                    class="flex-1 text-lg font-semibold border-0 border-b-2 border-transparent hover:border-gray-300 focus:border-purple-500 focus:outline-none question-text bg-white text-gray-900 placeholder-gray-400"
+                    placeholder="Question text"
+                >
+                <button class="text-red-500 hover:text-red-700 ml-4 delete-question">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+
+            <div class="flex items-center space-x-4 mb-4">
+                <select class="question-type border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900">
+                    <option value="text" {% if question.question_type == 'text' %}selected{% endif %}>Short Answer</option>
+                    <option value="textarea" {% if question.question_type == 'textarea' %}selected{% endif %}>Detailed Answer</option>
+                    <option value="multiple_choice" {% if question.question_type == 'multiple_choice' %}selected{% endif %}>Multiple Choice</option>
+                </select>
+                
+                <label class="flex items-center">
+                    <input type="checkbox" class="question-required mr-2" {% if question.is_required %}checked{% endif %}>
+                    <span class="text-sm text-gray-700">Required</span>
+                </label>
+            </div>
+
+            {% if question.question_type in 'multiple_choice,checkbox,dropdown' %}
+            <div class="options-container space-y-2 ml-4">
+                {% for option in question.options.all %}
+                <div class="flex items-center space-x-2 option-item" data-option-id="{{ option.id }}">
+                    <i class="fas fa-circle text-gray-400 text-xs"></i>
+                    <input 
+                        type="text" 
+                        value="{{ option.option_text }}"
+                        class="flex-1 border-0 border-b border-gray-300 focus:border-purple-500 focus:outline-none option-text bg-white text-gray-900 placeholder-gray-400"
+                        placeholder="Option text"
+                    >
+                    <button class="text-red-500 hover:text-red-700 delete-option">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                {% endfor %}
+                <button class="text-purple-600 hover:text-purple-700 text-sm add-option">
+                    <i class="fas fa-plus mr-1"></i>Add option
+                </button>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Add Question Button -->
+    <div class="mt-6">
+        <button id="add-question-btn" class="w-full bg-white hover:bg-gray-50 border-2 border-dashed border-purple-300 text-purple-600 rounded-lg py-4 font-medium transition">
+            <i class="fas fa-plus-circle mr-2"></i>Add Question
+        </button>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="mt-6 space-y-4">
+        <!-- Primary Actions -->
+        <div class="grid grid-cols-2 gap-4">
+            <a href="{% url 'interviews:ai_interview' interview.pk %}" class="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white px-6 py-3 rounded-lg font-medium text-center transition">
+                <i class="fas fa-robot mr-2"></i>Start AI Interview
+            </a>
+            <a href="{% url 'interviews:responses' interview.pk %}" class="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium text-center transition">
+                <i class="fas fa-chart-bar mr-2"></i>View Responses
+            </a>
+        </div>
+        
+        <!-- Share Link -->
+        <div class="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg p-4 border-2 border-purple-200">
+            <p class="text-sm font-semibold text-gray-800 mb-3">
+                <i class="fas fa-share-alt text-purple-600 mr-2"></i>Share AI Interview Link:
+            </p>
+            <div class="flex items-center space-x-2">
+                <input type="text" value="http://localhost:8000{% url 'interviews:ai_interview' interview.pk %}" readonly class="flex-1 px-4 py-3 text-sm bg-white border-2 border-purple-300 rounded-lg text-gray-700 font-mono" id="ai-link">
+                <button onclick="copyLink('ai-link')" class="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-lg transition font-medium">
+                    <i class="fas fa-copy mr-2"></i>Copy Link
+                </button>
+            </div>
+        </div>
+        
+        <!-- Back Button -->
+        <a href="{% url 'interviews:list' %}" class="block w-full text-center bg-gray-500 hover:bg-gray-600 text-white px-6 py-3 rounded-lg font-medium transition">
+            <i class="fas fa-arrow-left mr-2"></i>Back to Interviews
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+    
+    // Helper function to show notifications
+    function showNotification(message, type = 'success') {
+        const colors = {
+            success: 'bg-green-500',
+            error: 'bg-red-500',
+            info: 'bg-blue-500'
+        };
+        
+        const notification = document.createElement('div');
+        notification.className = `fixed top-4 right-4 ${colors[type]} text-white px-6 py-3 rounded-lg shadow-lg z-50 transition-opacity duration-300`;
+        notification.textContent = message;
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            notification.style.opacity = '0';
+            setTimeout(() => notification.remove(), 300);
+        }, 3000);
+    }
+    
+    // Add new question
+    document.getElementById('add-question-btn').addEventListener('click', async function() {
+        const btn = this;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Adding...';
+        
+        try {
+            const response = await fetch('{% url "interviews:edit" interview.pk %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrftoken,
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({
+                    action: 'add_question',
+                    question_text: 'Untitled Question',
+                    question_type: 'text',
+                    is_required: true
+                })
+            });
+            
+            if (response.ok) {
+                showNotification('Question added successfully!', 'success');
+                setTimeout(() => location.reload(), 500);
+            } else {
+                throw new Error('Failed to add question');
+            }
+        } catch (error) {
+            showNotification('Error adding question. Please try again.', 'error');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-plus-circle mr-2"></i>Add Question';
+        }
+    });
+    
+    // Update question on change
+    document.querySelectorAll('.question-text, .question-type, .question-required').forEach(el => {
+        el.addEventListener('change', async function() {
+            const card = this.closest('.question-card');
+            const questionId = card.dataset.questionId;
+            
+            await fetch('{% url "interviews:edit" interview.pk %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrftoken,
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({
+                    action: 'update_question',
+                    question_id: questionId,
+                    question_text: card.querySelector('.question-text').value,
+                    question_type: card.querySelector('.question-type').value,
+                    is_required: card.querySelector('.question-required').checked
+                })
+            });
+            
+            if (this.classList.contains('question-type')) {
+                location.reload();
+            }
+        });
+    });
+    
+    // Delete question
+    document.querySelectorAll('.delete-question').forEach(btn => {
+        btn.addEventListener('click', async function() {
+            if (!confirm('Delete this question?')) return;
+            
+            const card = this.closest('.question-card');
+            const questionId = card.dataset.questionId;
+            
+            const response = await fetch('{% url "interviews:edit" interview.pk %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrftoken,
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({
+                    action: 'delete_question',
+                    question_id: questionId
+                })
+            });
+            
+            if (response.ok) {
+                card.remove();
+            }
+        });
+    });
+    
+    // Add option
+    document.querySelectorAll('.add-option').forEach(btn => {
+        btn.addEventListener('click', async function() {
+            const card = this.closest('.question-card');
+            const questionId = card.dataset.questionId;
+            
+            const response = await fetch('{% url "interviews:edit" interview.pk %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrftoken,
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({
+                    action: 'add_option',
+                    question_id: questionId,
+                    option_text: 'Option'
+                })
+            });
+            
+            if (response.ok) {
+                location.reload();
+            }
+        });
+    });
+    
+    // Delete option
+    document.querySelectorAll('.delete-option').forEach(btn => {
+        btn.addEventListener('click', async function() {
+            const optionItem = this.closest('.option-item');
+            const optionId = optionItem.dataset.optionId;
+            
+            const response = await fetch('{% url "interviews:edit" interview.pk %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrftoken,
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({
+                    action: 'delete_option',
+                    option_id: optionId
+                })
+            });
+            
+            if (response.ok) {
+                optionItem.remove();
+            }
+        });
+    });
+});
+
+// Copy link to clipboard function
+function copyLink(inputId) {
+    const input = document.getElementById(inputId);
+    input.select();
+    input.setSelectionRange(0, 99999); // For mobile
+    
+    navigator.clipboard.writeText(input.value).then(() => {
+        // Show success message
+        const button = event.target.closest('button');
+        const originalText = button.innerHTML;
+        button.innerHTML = '<i class="fas fa-check"></i> Copied!';
+        button.classList.add('bg-green-600');
+        
+        setTimeout(() => {
+            button.innerHTML = originalText;
+            button.classList.remove('bg-green-600');
+        }, 2000);
+    }).catch(err => {
+        alert('Failed to copy link');
+    });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,40 @@
+<!doctype html>
+{% load static %}
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>AI Voice Interview - {{ interview.title }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link href="/static/css/voice-interview.css" rel="stylesheet" />
+</head>
+<body class="app">
+  <main class="container">
+    <header class="header">
+      <h1>{{ interview.title }}</h1>
+      <p class="muted">Press and hold the microphone to answer by voice.</p>
+    </header>
+
+    <section class="card">
+      <div class="row">
+        <input id="name" class="input" placeholder="Your name" />
+        <input id="email" class="input" placeholder="Your email" />
+        <input type="hidden" id="interviewId" value="{{ interview.id }}" />
+        <button id="startBtn" class="btn">Start Interview</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="row">
+        <button id="holdToTalk" class="btn mic" disabled>Hold to Answer</button>
+        <audio id="player" autoplay></audio>
+      </div>
+    </section>
+
+    <section class="card">
+      <div id="log" class="log"></div>
+    </section>
+  </main>
+
+  <script src="/static/js/voice-interview.js"></script>
+</body>
+</html>

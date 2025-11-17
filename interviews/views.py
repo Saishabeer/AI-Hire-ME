@@ -177,7 +177,14 @@ def interview_take(request, pk):
             elif question.question_type == 'multiple_choice':
                 option_id = request.POST.get(f'question_{question.id}')
                 if option_id:
-                    answer.selected_options.add(option_id)
+                    # Ensure we add a valid QuestionOption instance tied to this question
+                    try:
+                        opt_id_int = int(option_id)
+                        option = QuestionOption.objects.get(pk=opt_id_int, question=question)
+                        answer.selected_options.add(option)
+                    except (QuestionOption.DoesNotExist, ValueError, TypeError):
+                        # Ignore invalid option values
+                        pass
         
         messages.success(request, 'Interview submitted successfully!')
         return redirect('interviews:list')

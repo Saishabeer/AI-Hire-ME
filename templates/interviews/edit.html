@@ -52,7 +52,7 @@
                 </label>
             </div>
 
-            {% if question.question_type in 'multiple_choice,checkbox,dropdown' %}
+            {% if question.question_type == 'multiple_choice' %}
             <div class="options-container space-y-2 ml-4">
                 {% for option in question.options.all %}
                 <div class="flex items-center space-x-2 option-item" data-option-id="{{ option.id }}">

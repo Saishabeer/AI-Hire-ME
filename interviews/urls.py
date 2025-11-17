@@ -13,8 +13,9 @@ urlpatterns = [
     path('<int:pk>/take/', views.interview_take, name='take'),
     path('<int:pk>/responses/', views.interview_responses, name='responses'),
     
-    # AI Conversational Interview (page)
-    path('<int:pk>/ai-interview/', ai_views.ai_interview_start, name='ai_interview'),
+    # AI Conversational Interview (info + live)
+    path('<int:pk>/ai-interview/', ai_views.ai_interview_info, name='ai_interview'),
+    path('<int:pk>/ai-interview/live/', ai_views.ai_interview_start, name='ai_interview_live'),
 
     # AI Conversational Interview API (session-scoped)
     path('ai-interview/init/', ai_views.init_session, name='ai_interview_session_init'),
@@ -22,4 +23,6 @@ urlpatterns = [
     path('ai-interview/respond/', ai_views.respond, name='ai_interview_session_respond'),
     path('ai-interview/speak/', ai_views.speak, name='ai_interview_session_speak'),
     path('ai-interview/submit/', ai_views.submit, name='ai_interview_session_submit'),
+    path('ai-interview/realtime/session/', ai_views.realtime_session, name='ai_interview_realtime_session'),
+
 ]

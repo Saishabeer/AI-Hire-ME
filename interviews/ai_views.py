@@ -17,6 +17,7 @@ from .prompts import SYSTEM_PROMPT
 from . import openai_client as oc
 from .interview_session import new_session, get_session, add_turn
 import json
+import requests
 
 # Store active sessions (in production, use Redis or database)
 active_sessions = {}
@@ -43,6 +44,12 @@ def ai_interview_start(request, pk):
         'interview': interview,
     }
     return render(request, 'interviews/ai_voice_interview.html', context)
+
+
+def ai_interview_info(request, pk):
+    """Information page to collect candidate name and email before live interview."""
+    interview = get_object_or_404(Interview, pk=pk, is_active=True)
+    return render(request, 'interviews/ai_voice_info.html', { 'interview': interview })
 
 
 @require_http_methods(["POST"])
@@ -295,8 +302,11 @@ def init_session(request: HttpRequest) -> JsonResponse:
     except Exception:
         interview_id = 0
 
-    if not name or not email:
-        return HttpResponseBadRequest("Missing name or email")
+    # Allow defaults so the session can auto-start without user input
+    if not name:
+        name = "Guest"
+    if not email:
+        email = "guest@example.com"
     if not interview_id:
         return HttpResponseBadRequest("Missing interview_id")
 
@@ -310,8 +320,21 @@ def init_session(request: HttpRequest) -> JsonResponse:
     if not qs:
         assistant_text = f"Hello {name}, there are no questions configured for this interview yet."
         add_turn(sess.session_id, "assistant", assistant_text)
-        audio_b64 = oc.text_to_speech_base64(assistant_text)
-        return JsonResponse({"session_id": sess.session_id, "assistant_text": assistant_text, "audio_base64": audio_b64, "done": True}, status=200)
+        audio_b64 = None
+        try:
+            audio_b64 = oc.text_to_speech_base64(assistant_text)
+        except Exception:
+            # Allow flow to continue even if TTS is unavailable
+            audio_b64 = None
+        return JsonResponse(
+            {
+                "session_id": sess.session_id,
+                "assistant_text": assistant_text,
+                "audio_base64": audio_b64,
+                "done": True,
+            },
+            status=200,
+        )
 
     first_q = qs[0]
     first_q_tts = _tts_for_question(first_q)
@@ -320,9 +343,21 @@ def init_session(request: HttpRequest) -> JsonResponse:
         f"Let's begin. First question: {first_q_tts}"
     )
     add_turn(sess.session_id, "assistant", assistant_text)
-    audio_b64 = oc.text_to_speech_base64(assistant_text)
+    audio_b64 = None
+    try:
+        audio_b64 = oc.text_to_speech_base64(assistant_text)
+    except Exception:
+        # If TTS fails (e.g., missing/invalid API key), continue with text only.
+        audio_b64 = None
 
-    return JsonResponse({"session_id": sess.session_id, "assistant_text": assistant_text, "audio_base64": audio_b64}, status=200)
+    return JsonResponse(
+        {
+            "session_id": sess.session_id,
+            "assistant_text": assistant_text,
+            "audio_base64": audio_b64,
+        },
+        status=200,
+    )
 
 @csrf_exempt
 @require_POST
@@ -371,7 +406,10 @@ def respond(request: HttpRequest) -> JsonResponse:
         next_q_tts = _tts_for_question(next_q)
         assistant_text = f"Thank you. Next question: {next_q_tts}"
         add_turn(session_id, "assistant", assistant_text)
-        audio_b64 = oc.text_to_speech_base64(assistant_text)
+        try:
+            audio_b64 = oc.text_to_speech_base64(assistant_text)
+        except Exception:
+            audio_b64 = None
         return JsonResponse({"assistant_text": assistant_text, "audio_base64": audio_b64, "done": False}, status=200)
     else:
         # Persist to DB
@@ -386,7 +424,10 @@ def respond(request: HttpRequest) -> JsonResponse:
 
         closing = "Thank you. This concludes the interview. Have a great day!"
         add_turn(session_id, "assistant", closing)
-        audio_b64 = oc.text_to_speech_base64(closing)
+        try:
+            audio_b64 = oc.text_to_speech_base64(closing)
+        except Exception:
+            audio_b64 = None
         return JsonResponse({"assistant_text": closing, "audio_base64": audio_b64, "done": True, "response_id": response.id}, status=200)
 
 @csrf_exempt
@@ -411,6 +452,127 @@ def speak(request: HttpRequest) -> JsonResponse:
 
         audio_b64 = oc.text_to_speech_base64(text)
         return JsonResponse({"audio_base64": audio_b64}, status=200)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@csrf_exempt
+@require_POST
+def realtime_session(request: HttpRequest) -> JsonResponse:
+    """
+    POST /ai-interview/realtime/session/
+    Mints an ephemeral OpenAI Realtime session token for browser-side WebRTC.
+    Optionally accepts {session_id, name, email, interview_id} to craft instructions.
+    """
+    try:
+        api_key = getattr(settings, "OPENAI_API_KEY", os.environ.get("OPENAI_API_KEY", ""))
+        if not api_key:
+            return JsonResponse({"error": "OPENAI_API_KEY is not configured"}, status=500)
+
+        # Gather optional context to personalize instructions
+        session_id = (request.POST.get("session_id") or "").strip()
+        name = (request.POST.get("name") or "").strip()
+        email = (request.POST.get("email") or "").strip()
+        try:
+            interview_id = int(request.POST.get("interview_id") or 0)
+        except Exception:
+            interview_id = 0
+
+        if session_id and not interview_id:
+            sess = get_session(session_id)
+            if sess:
+                name = name or (sess.candidate_name or "")
+                email = email or (sess.candidate_email or "")
+                interview_id = interview_id or (sess.interview_id or 0)
+
+        instructions = ""
+        if interview_id:
+            try:
+                interview = Interview.objects.get(pk=interview_id, is_active=True)
+                # Build a strict question list from the HR-configured form
+                try:
+                    qs = list(interview.questions.all())
+                except Exception:
+                    qs = []
+
+                q_lines = []
+                for i, q in enumerate(qs, start=1):
+                    line = f"{i}. {q.question_text}".strip()
+                    try:
+                        if getattr(q, 'question_type', '') == 'multiple_choice':
+                            opts = []
+                            try:
+                                opts = [o.option_text for o in q.options.all()]
+                            except Exception:
+                                opts = []
+                            if opts:
+                                line += " Options: " + "; ".join(opts)
+                    except Exception:
+                        pass
+                    q_lines.append(line)
+
+                questions_block = "\n".join(q_lines) if q_lines else "(No questions configured)"
+
+                greet_name = f" {name}" if name else ""
+                instructions = (
+                    f"You are an AI interviewer for '{interview.title}'. Address the candidate{greet_name}.\n"
+                    "Ask ONLY the questions listed below, in the exact order, ONE at a time.\n"
+                    "After each candidate response, briefly acknowledge and immediately ask the next question.\n"
+                    "Do NOT invent, add, or skip questions. Do NOT change their meaning. Keep responses concise and professional.\n"
+                    "When the last question is answered, give a brief closing and stop.\n\n"
+                    f"Questions to ask (strict order):\n{questions_block}"
+                )
+            except Interview.DoesNotExist:
+                instructions = (
+                    f"You are an AI interviewer. Address the candidate{(' ' + name) if name else ''}. "
+                    "No questions are configured; politely inform the candidate and end the call."
+                )
+        else:
+            instructions = (
+                f"You are an AI interviewer. Address the candidate{(' ' + name) if name else ''}. "
+                "No interview was specified; politely inform the candidate and end the call."
+            )
+
+        model = getattr(settings, "OPENAI_REALTIME_MODEL", "gpt-4o-realtime-preview-2024-12-17")
+        voice = getattr(settings, "OPENAI_TTS_VOICE", "alloy")
+
+        url = "https://api.openai.com/v1/realtime/sessions"
+        payload = {
+            "model": model,
+            "voice": voice,
+            # OpenAI sessions requires either ["text"] or ["audio","text"].
+            # We want live audio back-and-forth, so include both.
+            "modalities": ["audio", "text"],
+            "instructions": instructions,
+            # Enable server-side VAD so the model responds when you finish speaking
+            "turn_detection": {"type": "server_vad", "threshold": 0.5},
+        }
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "OpenAI-Beta": "realtime=v1",
+        }
+
+        r = requests.post(url, json=payload, headers=headers, timeout=20)
+        r.raise_for_status()
+        js = r.json()
+        token = (js.get("client_secret") or {}).get("value")
+        if not token:
+            return JsonResponse({"error": "Failed to create ephemeral token"}, status=500)
+
+        return JsonResponse({
+            "token": token,
+            "expires_at": (js.get("client_secret") or {}).get("expires_at"),
+            "model": js.get("model", model),
+            # Echo back the exact instructions we constructed so the frontend can reinforce them
+            "instructions": instructions,
+            "voice": voice,
+        })
+    except requests.HTTPError as e:
+        try:
+            return JsonResponse({"error": e.response.text}, status=e.response.status_code)
+        except Exception:
+            return JsonResponse({"error": str(e)}, status=500)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
 

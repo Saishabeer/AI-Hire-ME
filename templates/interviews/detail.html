@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ interview.title }} - Interview Details{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto">
+  <div class="bg-white rounded-lg shadow-lg p-8 text-gray-900">
+    <h1 class="text-3xl font-bold mb-2">{{ interview.title }}</h1>
+    {% if interview.description %}<p class="text-gray-700 mb-6">{{ interview.description }}</p>{% endif %}
+
+    <div class="flex items-center text-sm text-gray-600 mb-6 space-x-3">
+      <span><i class="fas fa-user mr-1"></i> {{ interview.created_by.username }}</span>
+      <span>•</span>
+      <span><i class="fas fa-calendar mr-1"></i> {{ interview.created_at|date:"M d, Y" }}</span>
+      <span>•</span>
+      <span><i class="fas fa-toggle-on mr-1"></i> {% if interview.is_active %}Active{% else %}Inactive{% endif %}</span>
+    </div>
+
+    <h2 class="text-xl font-semibold mb-3">Questions</h2>
+    <div class="space-y-4">
+      {% for q in interview.questions.all %}
+      <div class="border border-gray-200 rounded-lg p-5">
+        <div class="flex justify-between items-start">
+          <h3 class="text-lg font-semibold">Q{{ forloop.counter }}. {{ q.question_text }}</h3>
+          <span class="text-xs px-2 py-1 rounded bg-purple-100 text-purple-800">{{ q.get_question_type_display }}</span>
+        </div>
+        {% if q.question_type == 'multiple_choice' %}
+          <ul class="list-disc list-inside mt-2 text-gray-800">
+            {% for opt in q.options.all %}
+            <li>{{ opt.option_text }}</li>
+            {% empty %}
+            <li class="text-gray-500">No options added</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+        {% if q.is_required %}
+        <p class="text-xs text-gray-500 mt-2"><i class="fas fa-asterisk mr-1"></i>Required</p>
+        {% endif %}
+      </div>
+      {% empty %}
+      <p class="text-gray-600">No questions yet.</p>
+      {% endfor %}
+    </div>
+
+    <div class="mt-8 flex flex-wrap gap-3">
+      <a href="{% url 'interviews:edit' interview.pk %}" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition"><i class="fas fa-edit mr-2"></i>Edit</a>
+      <a href="{% url 'interviews:preview' interview.pk %}" class="bg-gray-200 hover:bg-gray-300 text-gray-900 px-4 py-2 rounded-lg font-medium transition"><i class="fas fa-eye mr-2"></i>Preview</a>
+      <a href="{% url 'interviews:responses' interview.pk %}" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition"><i class="fas fa-chart-bar mr-2"></i>Responses</a>
+      <a href="{% url 'interviews:ai_interview' interview.pk %}" class="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition"><i class="fas fa-robot mr-2"></i>AI Interview</a>
+      <a href="{% url 'interviews:delete' interview.pk %}" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium transition"><i class="fas fa-trash mr-2"></i>Delete</a>
+      <a href="{% url 'interviews:list' %}" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-medium transition"><i class="fas fa-arrow-left mr-2"></i>Back</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

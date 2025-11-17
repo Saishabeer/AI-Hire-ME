@@ -23,6 +23,26 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-dev-key-change-in-producti
 # OpenAI configuration (read from environment or .env)
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
 
+# Back-compat/env aliasing for client modules that read env directly
+# Map OPENAI_BASE_URL -> OPENAI_API_BASE (ensure trailing /v1)
+if not os.getenv('OPENAI_API_BASE'):
+    _base = os.getenv('OPENAI_BASE_URL', '').strip()
+    if _base:
+        _b = _base.rstrip('/')
+        if not _b.endswith('/v1'):
+            _b = _b + '/v1'
+        os.environ['OPENAI_API_BASE'] = _b
+
+# Map TRANSCRIBE_MODEL -> OPENAI_TRANSCRIBE_MODEL
+if not os.getenv('OPENAI_TRANSCRIBE_MODEL') and os.getenv('TRANSCRIBE_MODEL'):
+    os.environ['OPENAI_TRANSCRIBE_MODEL'] = os.getenv('TRANSCRIBE_MODEL', '').strip()
+
+# Expose realtime model/voice to Django settings (used by ai_views)
+OPENAI_REALTIME_MODEL = os.getenv('OPENAI_REALTIME_MODEL', 'gpt-4o-realtime-preview-2024-12-17')
+OPENAI_REALTIME_VOICE = os.getenv('OPENAI_REALTIME_VOICE', os.getenv('OPENAI_TTS_VOICE', 'alloy'))
+# Keep TTS voice for other modules if they reference it
+OPENAI_TTS_VOICE = os.getenv('OPENAI_TTS_VOICE', OPENAI_REALTIME_VOICE)
+
 # SECURITY WARNING: don't run with debug turned on in production!
 def _get_bool(name: str, default: bool) -> bool:
     v = os.getenv(name)
@@ -121,14 +141,14 @@ USE_I18N = True
 USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_DIRS = [
     BASE_DIR / 'static',
 ]
 
 # Media files
-MEDIA_URL = 'media/'
+MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 # Default primary key field type

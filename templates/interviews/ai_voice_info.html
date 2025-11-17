@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+
+{% block title %}Start AI Interview — {{ interview.title }}{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+  <div class="bg-white rounded-lg shadow-lg p-6 text-gray-900">
+    <h1 class="text-2xl font-bold mb-2">
+      <i class="fas fa-robot mr-2"></i>Start AI Interview
+    </h1>
+    <p class="text-gray-700 mb-4">
+      {{ interview.title }}
+      {% if interview.description %} — {{ interview.description }}{% endif %}
+    </p>
+
+    <form method="get" action="{% url 'interviews:ai_interview_live' interview.pk %}" class="space-y-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label class="block text-sm font-medium mb-1">Your name</label>
+          <input name="name" type="text" class="w-full border rounded px-3 py-2" placeholder="Full name" required />
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Your email</label>
+          <input name="email" type="email" class="w-full border rounded px-3 py-2" placeholder="name@example.com" required />
+        </div>
+      </div>
+
+      <div class="pt-2">
+        <button type="submit" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded">
+          <i class="fas fa-microphone mr-1"></i>Start Interview
+        </button>
+        <a href="{% url 'interviews:detail' interview.pk %}" class="ml-3 text-sm text-gray-600 hover:text-gray-800">Back</a>
+      </div>
+    </form>
+
+    <p class="text-xs text-gray-500 mt-4">We ask for your name and email to associate your interview responses.</p>
+  </div>
+</div>
+{% endblock %}

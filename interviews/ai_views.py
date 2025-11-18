@@ -486,6 +486,8 @@ def realtime_session(request: HttpRequest) -> JsonResponse:
                 interview_id = interview_id or (sess.interview_id or 0)
 
         instructions = ""
+        questions_array = []
+        closing_line = "Thank you. This concludes the interview. Have a great day!"
         if interview_id:
             try:
                 interview = Interview.objects.get(pk=interview_id, is_active=True)
@@ -496,8 +498,10 @@ def realtime_session(request: HttpRequest) -> JsonResponse:
                     qs = []
 
                 q_lines = []
+                questions_array = []
                 for i, q in enumerate(qs, start=1):
-                    line = f"{i}. {q.question_text}".strip()
+                    # Plain question text used for deterministic prompting
+                    q_text = f"{q.question_text}".strip()
                     try:
                         if getattr(q, 'question_type', '') == 'multiple_choice':
                             opts = []
@@ -506,9 +510,12 @@ def realtime_session(request: HttpRequest) -> JsonResponse:
                             except Exception:
                                 opts = []
                             if opts:
-                                line += " Options: " + "; ".join(opts)
+                                q_text = (q_text + " Options: " + "; ".join(opts)).strip()
                     except Exception:
                         pass
+                    questions_array.append(q_text)
+                    # For human-readable instruction block with numbering
+                    line = f"{i}. {q_text}"
                     q_lines.append(line)
 
                 questions_block = "\n".join(q_lines) if q_lines else "(No questions configured)"
@@ -517,9 +524,11 @@ def realtime_session(request: HttpRequest) -> JsonResponse:
                 instructions = (
                     f"You are an AI interviewer for '{interview.title}'. Address the candidate{greet_name}.\n"
                     "Ask ONLY the questions listed below, in the exact order, ONE at a time.\n"
+                    "Use the EXACT wording of each question VERBATIM.\n"
                     "After each candidate response, briefly acknowledge and immediately ask the next question.\n"
                     "Do NOT invent, add, or skip questions. Do NOT change their meaning. Keep responses concise and professional.\n"
-                    "When the last question is answered, give a brief closing and stop.\n\n"
+                    "When the last question is answered, speak this exact closing line and stop:\n"
+                    f"\"{closing_line}\"\n\n"
                     f"Questions to ask (strict order):\n{questions_block}"
                 )
             except Interview.DoesNotExist:
@@ -567,6 +576,9 @@ def realtime_session(request: HttpRequest) -> JsonResponse:
             # Echo back the exact instructions we constructed so the frontend can reinforce them
             "instructions": instructions,
             "voice": voice,
+            # Provide deterministic question list and closing line for client-side orchestration
+            "questions": questions_array,
+            "closing": closing_line,
         })
     except requests.HTTPError as e:
         try:

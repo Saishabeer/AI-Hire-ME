@@ -63,3 +63,56 @@ python manage.py runserver
 
 ## License
 MIT (add a LICENSE file if needed)
+
+## Audio testing and troubleshooting
+
+Use this checklist if you can’t hear the AI voice.
+
+Run and prepare
+- Start the server:
+  - python manage.py migrate
+  - python manage.py runserver
+- Open http://localhost:8000 (use localhost to avoid insecure-origin WebRTC issues)
+- Create an interview with at least one question
+
+Start the voice interview
+- From the interview, click “AI Interview”, fill in your name and email, then continue
+- On the live interview page, click the “Start Audio” button to satisfy browser autoplay policies
+- When prompted, allow microphone access
+
+What you should see/hear
+- The AI greets you and asks the first question
+- Transcripts appear in real time on the page
+- If realtime audio is blocked, you will still see the AI text and:
+  - The page will try to play a server-generated MP3 greeting, OR
+  - Your browser’s local TTS will speak the greeting
+
+Environment requirements
+- .env must include: OPENAI_API_KEY=your_openai_api_key_here
+- On first launch, browsers may block autoplay; always click “Start Audio” if you don’t hear anything
+- Use Chrome/Edge latest for best WebRTC compatibility
+- Keep testing on https:// or http://localhost to avoid mixed/insecure origin blocks
+
+Common issues and fixes
+- Nothing plays automatically:
+  - Click “Start Audio” on the page (autoplay policy)
+  - Check the status text; if it mentions fallback TTS, remote audio may be blocked, but local TTS should speak
+- Still silent after clicking:
+  - Verify your system output device and volume
+  - Check DevTools Console for errors
+  - Confirm OPENAI_API_KEY in .env and restart the server
+- Insecure origin:
+  - If you’re not on https:// or localhost, many browsers block WebRTC audio. Use http://localhost or configure HTTPS
+- Corporate network or VPN:
+  - STUN/ICE traffic may be blocked. You may still receive AI text; fallback TTS will try to read it locally
+
+Advanced options (URL query params on the live page)
+- ?voice=alloy (or another supported OpenAI voice) to override the voice
+- ?transcribeModel=gpt-4o-mini-transcribe or whisper-1 to choose STT model
+- ?disableLocalTTS=true to turn off the local speech fallback (for debugging)
+
+Where the behavior is implemented (for reference)
+- Client logic: static/js/voice-interview.js
+  - Realtime handling and audio fallback logic is in that file
+- Live page: templates/interviews/ai_voice_interview.html
+  - Includes the “Start Audio” button to comply with autoplay policies

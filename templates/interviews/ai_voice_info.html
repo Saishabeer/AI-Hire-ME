@@ -25,6 +25,37 @@
         </div>
       </div>
 
+      <!-- Advanced audio options (optional) -->
+      <div class="border border-gray-200 rounded p-3 mt-2">
+        <div class="text-sm font-medium text-gray-800 mb-2">
+          Advanced audio options (optional)
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm font-medium mb-1">AI Voice</label>
+            <select name="voice" class="w-full border rounded px-3 py-2">
+              <option value="">Auto (default)</option>
+              <option value="alloy" selected>alloy</option>
+              <option value="verse">verse</option>
+              <option value="echo">echo</option>
+              <option value="fable">fable</option>
+              <option value="onyx">onyx</option>
+              <option value="nova">nova</option>
+              <option value="shimmer">shimmer</option>
+            </select>
+            <p class="text-xs text-gray-500 mt-1">You can also override later via ?voice=… on the live page.</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Transcription model</label>
+            <select name="transcribeModel" class="w-full border rounded px-3 py-2">
+              <option value="gpt-4o-mini-transcribe" selected>gpt-4o-mini-transcribe (default)</option>
+              <option value="whisper-1">whisper-1</option>
+            </select>
+            <p class="text-xs text-gray-500 mt-1">Realtime STT model used for input audio.</p>
+          </div>
+        </div>
+      </div>
+
       <div class="pt-2">
         <button type="submit" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded">
           <i class="fas fa-microphone mr-1"></i>Start Interview

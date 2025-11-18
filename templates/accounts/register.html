@@ -1,86 +1,70 @@
-{% extends 'base.html' %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Sign up</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; padding: 24px; background: #f6f8fa; }
+    .container { max-width: 520px; margin: 0 auto; background: #fff; border: 1px solid #e1e4e8; border-radius: 8px; padding: 24px; }
+    h1 { font-size: 20px; margin: 0 0 16px; }
+    .messages { margin-bottom: 12px; }
+    .message { padding: 8px 10px; border-radius: 4px; margin-bottom: 6px; }
+    .message.info { background: #e7f3ff; color: #033e8c; }
+    .message.success { background: #e6ffed; color: #066a2c; }
+    .message.warning { background: #fff5e6; color: #8a5400; }
+    .message.error { background: #ffe6e6; color: #8a0000; }
+    .non-field-errors { margin-bottom: 12px; color: #8a0000; background: #ffe6e6; padding: 8px 10px; border-radius: 4px; }
+    .field { margin-bottom: 14px; }
+    .field label { display: block; font-weight: 600; margin-bottom: 6px; }
+    .field input { width: 100%; padding: 10px 12px; border: 1px solid #d0d7de; border-radius: 6px; font-size: 14px; }
+    .field .help { font-size: 12px; color: #57606a; margin-top: 4px; }
+    .errors { color: #8a0000; font-size: 13px; margin-top: 6px; }
+    .actions { margin-top: 18px; display: flex; gap: 10px; align-items: center; }
+    button[type="submit"] { background: #2da44e; color: #fff; border: 0; padding: 10px 14px; border-radius: 6px; cursor: pointer; }
+    a { color: #0969da; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Create your account</h1>
 
-{% block title %}Register - AI Interviewer{% endblock %}
+    {% if messages %}
+      <div class="messages">
+        {% for message in messages %}
+          <div class="message {{ message.tags|default:'info' }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
 
-{% block content %}
-<div class="max-w-md mx-auto">
-    <div class="bg-white rounded-lg shadow-lg p-8">
-        <div class="text-center mb-8">
-            <i class="fas fa-user-plus text-5xl text-green-600 mb-4"></i>
-            <h1 class="text-3xl font-bold text-gray-900">Create Account</h1>
-            <p class="text-gray-600 mt-2">Start creating AI interviews today</p>
+    {% if form.non_field_errors %}
+      <div class="non-field-errors">
+        {% for err in form.non_field_errors %}{{ err }}<br />{% endfor %}
+      </div>
+    {% endif %}
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      {% for field in form.visible_fields %}
+        <div class="field">
+          <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+          {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}
+          {% if field.errors %}
+            <div class="errors">
+              {% for err in field.errors %}{{ err }}<br />{% endfor %}
+            </div>
+          {% endif %}
         </div>
+      {% endfor %}
 
-        <form method="post" class="space-y-6">
-            {% csrf_token %}
-            
-            {% if form.errors %}
-            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-                <ul class="list-disc list-inside">
-                    {% for field in form %}
-                        {% for error in field.errors %}
-                        <li>{{ error }}</li>
-                        {% endfor %}
-                    {% endfor %}
-                    {% for error in form.non_field_errors %}
-                    <li>{{ error }}</li>
-                    {% endfor %}
-                </ul>
-            </div>
-            {% endif %}
-
-            <div>
-                <label for="{{ form.username.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
-                    Username
-                </label>
-                {{ form.username }}
-            </div>
-
-            <div>
-                <label for="{{ form.password1.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
-                    Password
-                </label>
-                {{ form.password1 }}
-            </div>
-
-            <div>
-                <label for="{{ form.password2.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-2">
-                    Confirm Password
-                </label>
-                {{ form.password2 }}
-            </div>
-
-            <button 
-                type="submit"
-                class="w-full bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 text-white px-6 py-3 rounded-lg font-medium transition"
-            >
-                <i class="fas fa-user-plus mr-2"></i>Create Account
-            </button>
-
-            <div class="text-center">
-                <p class="text-gray-600">
-                    Already have an account? 
-                    <a href="{% url 'accounts:login' %}" class="text-purple-600 hover:text-purple-700 font-medium">
-                        Login here
-                    </a>
-                </p>
-            </div>
-        </form>
-    </div>
-</div>
-
-<style>
-    input[type="text"], input[type="password"] {
-        width: 100%;
-        padding: 0.75rem 1rem;
-        border: 1px solid #d1d5db;
-        border-radius: 0.5rem;
-    }
-    input[type="text"]:focus, input[type="password"]:focus {
-        outline: none;
-        ring: 2px;
-        ring-color: #9333ea;
-        border-color: transparent;
-    }
-</style>
-{% endblock %}
+      <div class="actions">
+        <button type="submit">Sign up</button>
+        <a href="{% url 'login' %}">Already have an account?</a>
+      </div>
+    </form>
+  </div>
+</body>
+</html>

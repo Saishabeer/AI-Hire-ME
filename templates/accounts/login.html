@@ -1,64 +1,70 @@
-{% extends 'base.html' %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Login</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; padding: 24px; background: #f6f8fa; }
+    .container { max-width: 480px; margin: 0 auto; background: #fff; border: 1px solid #e1e4e8; border-radius: 8px; padding: 24px; }
+    h1 { font-size: 20px; margin: 0 0 16px; }
+    .messages { margin-bottom: 12px; }
+    .message { padding: 8px 10px; border-radius: 4px; margin-bottom: 6px; }
+    .message.info { background: #e7f3ff; color: #033e8c; }
+    .message.success { background: #e6ffed; color: #066a2c; }
+    .message.warning { background: #fff5e6; color: #8a5400; }
+    .message.error { background: #ffe6e6; color: #8a0000; }
+    .non-field-errors { margin-bottom: 12px; color: #8a0000; background: #ffe6e6; padding: 8px 10px; border-radius: 4px; }
+    .field { margin-bottom: 14px; }
+    .field label { display: block; font-weight: 600; margin-bottom: 6px; }
+    .field input { width: 100%; padding: 10px 12px; border: 1px solid #d0d7de; border-radius: 6px; font-size: 14px; }
+    .field .help { font-size: 12px; color: #57606a; margin-top: 4px; }
+    .errors { color: #8a0000; font-size: 13px; margin-top: 6px; }
+    .actions { margin-top: 18px; display: flex; gap: 10px; align-items: center; }
+    button[type="submit"] { background: #1f6feb; color: #fff; border: 0; padding: 10px 14px; border-radius: 6px; cursor: pointer; }
+    a { color: #0969da; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Login</h1>
 
-{% block title %}Login - AI Interviewer{% endblock %}
+    {% if messages %}
+      <div class="messages">
+        {% for message in messages %}
+          <div class="message {{ message.tags|default:'info' }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
 
-{% block content %}
-<div class="max-w-md mx-auto">
-    <div class="bg-white rounded-lg shadow-lg p-8">
-        <div class="text-center mb-8">
-            <i class="fas fa-user-lock text-5xl text-purple-600 mb-4"></i>
-            <h1 class="text-3xl font-bold text-gray-900">Welcome Back</h1>
-            <p class="text-gray-600 mt-2">Login to manage your interviews</p>
+    {% if form.non_field_errors %}
+      <div class="non-field-errors">
+        {% for err in form.non_field_errors %}{{ err }}<br />{% endfor %}
+      </div>
+    {% endif %}
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      {% for field in form.visible_fields %}
+        <div class="field">
+          <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+          {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}
+          {% if field.errors %}
+            <div class="errors">
+              {% for err in field.errors %}{{ err }}<br />{% endfor %}
+            </div>
+          {% endif %}
         </div>
+      {% endfor %}
 
-        <form method="post" class="space-y-6">
-            {% csrf_token %}
-            
-            <div>
-                <label for="id_username" class="block text-sm font-medium text-gray-700 mb-2">
-                    Username
-                </label>
-                <input 
-                    type="text" 
-                    name="username" 
-                    id="id_username"
-                    required
-                    autofocus
-                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    placeholder="Your username"
-                >
-            </div>
-
-            <div>
-                <label for="id_password" class="block text-sm font-medium text-gray-700 mb-2">
-                    Password
-                </label>
-                <input 
-                    type="password" 
-                    name="password" 
-                    id="id_password"
-                    required
-                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    placeholder="Your password"
-                >
-            </div>
-
-            <button 
-                type="submit"
-                class="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white px-6 py-3 rounded-lg font-medium transition"
-            >
-                <i class="fas fa-sign-in-alt mr-2"></i>Login
-            </button>
-
-            <div class="text-center">
-                <p class="text-gray-600">
-                    Don't have an account? 
-                    <a href="{% url 'accounts:register' %}" class="text-purple-600 hover:text-purple-700 font-medium">
-                        Register here
-                    </a>
-                </p>
-            </div>
-        </form>
-    </div>
-</div>
-{% endblock %}
+      <div class="actions">
+        <button type="submit">Sign in</button>
+        <a href="{% url 'signup' %}">Create an account</a>
+      </div>
+    </form>
+  </div>
+</body>
+</html>

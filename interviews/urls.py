@@ -23,6 +23,7 @@ urlpatterns = [
     path('ai-interview/respond/', ai_views.respond, name='ai_interview_session_respond'),
     path('ai-interview/speak/', ai_views.speak, name='ai_interview_session_speak'),
     path('ai-interview/submit/', ai_views.submit, name='ai_interview_session_submit'),
-    path('ai-interview/realtime/session/', ai_views.realtime_session, name='ai_interview_realtime_session'),
 
+    # Realtime: route to views.realtime_session to avoid adding new files
+    path('ai-interview/realtime/session/', views.realtime_session, name='ai_interview_realtime_session'),
 ]

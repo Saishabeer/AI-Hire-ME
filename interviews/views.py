@@ -6,6 +6,14 @@ from django.views.decorators.http import require_http_methods
 from .models import Interview, Question, QuestionOption, InterviewResponse, Answer
 import json
 
+# Added imports for realtime session minting
+from django.views.decorators.csrf import csrf_exempt
+from django.conf import settings
+import os
+import urllib.request
+import urllib.error
+import urllib.parse
+
 
 def interview_list(request):
     """List all interviews"""
@@ -207,3 +215,103 @@ def interview_responses(request, pk):
         'responses': responses,
     }
     return render(request, 'interviews/responses.html', context)
+
+
+# === Realtime AI Interview: Mint ephemeral OpenAI Realtime session token ===
+@csrf_exempt
+@require_http_methods(["POST"])
+def realtime_session(request):
+    """
+    Returns an ephemeral OpenAI Realtime session token configured with server-side VAD.
+    If an interview_id is provided in the POST body, the session is constrained to ONLY ask
+    that interview's questions in order and never invent new questions.
+    """
+    api_key = getattr(settings, "OPENAI_API_KEY", os.getenv("OPENAI_API_KEY"))
+    if not api_key:
+        return JsonResponse({"error": "OPENAI_API_KEY is not configured on the server."}, status=500)
+
+    # Try to read interview_id from request to build strict instructions
+    interview = None
+    try:
+        raw = request.body.decode("utf-8") if request.body else "{}"
+        body_json = json.loads(raw or "{}")
+        interview_id = body_json.get("interview_id") or body_json.get("pk")
+        if interview_id:
+            try:
+                interview = Interview.objects.get(pk=interview_id, is_active=True)
+            except Interview.DoesNotExist:
+                return JsonResponse({"error": "Interview not found or inactive."}, status=404)
+    except Exception:
+        # If body can't be parsed, continue with generic behavior
+        interview = None
+
+    model = "gpt-4o-realtime-preview-2024-12-17"
+
+    # Build strict instructions when an interview is provided
+    if interview:
+        questions = list(
+            interview.questions.all().order_by("order", "id").values_list("question_text", flat=True)
+        )
+        enumerated = "\n".join([f"{i+1}. {q}" for i, q in enumerate(questions)]) or "1. (no questions defined)"
+        strict_instructions = (
+            f"You are interviewing a candidate for '{interview.title}'. "
+            "Ask ONLY the following questions in EXACTLY this order, one at a time. "
+            "Do NOT add, invent, or substitute any other questions. "
+            "After each answer, briefly acknowledge and move on to the next question. "
+            "If the candidate has already answered a question implicitly, you may briefly confirm and then proceed. "
+            "If interrupted, stop speaking and listen (barge-in). "
+            "Conclude politely after the final question.\n\n"
+            "Questions:\n"
+            f"{enumerated}"
+        )
+        instructions = strict_instructions
+    else:
+        # Generic fallback (less strict if no interview provided)
+        instructions = (
+            "You are a professional interviewer. Start immediately by greeting the candidate and asking the first question. "
+            "Continue asking one question at a time automatically. If the candidate interrupts, stop speaking and listen (barge-in). "
+            "Keep responses concise and conversational. Conclude politely when the interview is complete."
+        )
+
+    payload = {
+        "model": model,
+        "voice": "verse",
+        "modalities": ["text", "audio"],
+        "turn_detection": {
+            "type": "server_vad",
+            "threshold": 0.5,
+            "prefix_padding_ms": 300,
+            "silence_duration_ms": 400
+        },
+        "instructions": instructions,
+    }
+
+    try:
+        req = urllib.request.Request(
+            "https://api.openai.com/v1/realtime/sessions",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            body = resp.read().decode("utf-8")
+            data = json.loads(body)
+            # Return only what's needed by the browser
+            return JsonResponse(
+                {
+                    "client_secret": data.get("client_secret"),
+                    "id": data.get("id"),
+                    "model": data.get("model"),
+                }
+            )
+    except urllib.error.HTTPError as e:
+        try:
+            err_body = e.read().decode("utf-8")
+        except Exception:
+            err_body = ""
+        return JsonResponse({"error": "Failed to create session", "details": err_body}, status=e.code)
+    except Exception as e:
+        return JsonResponse({"error": "Internal server error", "details": str(e)}, status=500)

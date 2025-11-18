@@ -3,7 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
-from .models import Interview, Question, QuestionOption, InterviewResponse, Answer
+from .models import Interview, Section, Question, QuestionOption, InterviewResponse, Answer
 import json
 
 # Added imports for realtime session minting
@@ -68,8 +68,24 @@ def interview_edit(request, pk):
             action = data.get('action')
 
             if action == 'add_question':
+                # Optional section assignment on create
+                sec = None
+                sid = data.get('section_id')
+                if sid not in (None, '', 'null'):
+                    try:
+                        sec = Section.objects.get(pk=sid, interview=interview)
+                    except Section.DoesNotExist:
+                        sec = None
+                # Always default to first section when none resolved (enforce all questions belong to a section)
+                if sec is None:
+                    try:
+                        sec = interview.sections.order_by("order", "id").first()
+                    except Exception:
+                        sec = None
+
                 question = Question.objects.create(
                     interview=interview,
+                    section=sec,
                     question_text=data.get('question_text', 'Untitled Question'),
                     question_type=data.get('question_type', 'text'),
                     is_required=bool(data.get('is_required', True)),
@@ -99,6 +115,17 @@ def interview_edit(request, pk):
                 )
                 return JsonResponse({'success': True, 'option_id': option.id})
 
+            elif action == 'update_option':
+                # Update option text (ensure option belongs to this interview)
+                option = get_object_or_404(
+                    QuestionOption,
+                    pk=data.get('option_id'),
+                    question__interview=interview
+                )
+                option.option_text = data.get('option_text', option.option_text)
+                option.save()
+                return JsonResponse({'success': True})
+            
             elif action == 'delete_option':
                 # Hardened: ensure the option belongs to the current interview
                 option = get_object_or_404(
@@ -109,10 +136,75 @@ def interview_edit(request, pk):
                 option.delete()
                 return JsonResponse({'success': True})
 
+            elif action == 'add_section':
+                title = (data.get('title') or 'Untitled Section').strip()
+                description = (data.get('description') or '').strip()
+                section = Section.objects.create(
+                    interview=interview,
+                    title=title or 'Untitled Section',
+                    description=description,
+                    order=interview.sections.count()
+                )
+                return JsonResponse({'success': True, 'section_id': section.id})
+
+            elif action == 'update_section':
+                section = get_object_or_404(Section, pk=data.get('section_id'), interview=interview)
+                if 'title' in data:
+                    section.title = (data.get('title') or '').strip() or section.title
+                if 'description' in data:
+                    section.description = (data.get('description') or '').strip()
+                if 'order' in data and isinstance(data.get('order'), int):
+                    section.order = data.get('order')
+                section.save()
+                return JsonResponse({'success': True})
+
+            elif action == 'delete_section':
+                section = get_object_or_404(Section, pk=data.get('section_id'), interview=interview)
+                # Reassign questions from this section to a fallback section (no 'General' bucket)
+                others = interview.sections.exclude(pk=section.pk).order_by("order", "id")
+                if others.exists():
+                    fallback = others.first()
+                else:
+                    # Create a new section if none remain
+                    fallback = Section.objects.create(interview=interview, title="Section 1", order=0)
+                Question.objects.filter(interview=interview, section=section).update(section=fallback)
+                section.delete()
+                return JsonResponse({'success': True, 'fallback_section_id': fallback.id})
+
+            elif action == 'move_question':
+                question = get_object_or_404(Question, pk=data.get('question_id'), interview=interview)
+                section_id = data.get('section_id')
+                if section_id in (None, '', 'null'):
+                    # Keep current section or fallback to the first available section (no unsectioned state)
+                    fallback = question.section or interview.sections.order_by("order", "id").first()
+                    if fallback is None:
+                        fallback = Section.objects.create(interview=interview, title="Section 1", order=0)
+                    question.section = fallback
+                else:
+                    section = get_object_or_404(Section, pk=section_id, interview=interview)
+                    question.section = section
+                if 'order' in data and isinstance(data.get('order'), int):
+                    question.order = data.get('order')
+                question.save()
+                return JsonResponse({'success': True})
+
         messages.success(request, 'Interview updated successfully!')
         return redirect('interviews:edit', pk=pk)
+    
+    # Ensure at least one section exists; if none, create a default and attach unsectioned questions
+    if interview.sections.count() == 0:
+        Section.objects.create(interview=interview, title="Section 1", order=0)
+    first_sec = interview.sections.order_by("order", "id").first()
+    if first_sec:
+        # Attach any legacy unsectioned questions to the first section to avoid a 'General' bucket
+        Interview.objects.filter(pk=interview.pk)  # no-op to ensure interview stays referenced
+        Question.objects.filter(interview=interview, section__isnull=True).update(section=first_sec)
 
-    context = {'interview': interview, 'questions': interview.questions.all()}
+    context = {
+        'interview': interview,
+        'sections': interview.sections.all(),
+        'questions': interview.questions.select_related('section').all()
+    }
     return render(request, 'interviews/edit.html', context)
 
 
@@ -232,20 +324,42 @@ def realtime_session(request):
 
     # Build strict instructions when an interview is provided
     if interview:
-        questions = list(
-            interview.questions.all().order_by("order", "id").values_list("question_text", flat=True)
-        )
-        enumerated = "\n".join([f"{i+1}. {q}" for i, q in enumerate(questions)]) or "1. (no questions defined)"
+        # Compose questions grouped strictly by defined sections (no 'General' bucket)
+        section_lines = []
+        idx = 1
+        try:
+            sections = list(interview.sections.all().order_by("order", "id"))
+        except Exception:
+            sections = []
+        if sections:
+            for s in sections:
+                try:
+                    qtexts = list(
+                        s.questions.all().order_by("order", "id").values_list("question_text", flat=True)
+                    )
+                except Exception:
+                    qtexts = []
+                section_lines.append(f"Section: {s.title}")
+                if qtexts:
+                    for q in qtexts:
+                        section_lines.append(f"{idx}. {q}")
+                        idx += 1
+                else:
+                    section_lines.append(f"{idx}. (no questions)")
+                    idx += 1
+        questions_block = "\n".join(section_lines) if section_lines else "(No questions configured)"
+
         instructions = (
             f"You are interviewing a candidate for '{interview.title}'. "
-            "Ask ONLY the following questions in EXACTLY this order, one at a time. "
+            "Ask ONLY the following questions in EXACTLY this order, one section at a time. "
+            "Finish all questions in a section before starting the next. "
             "Do NOT add, invent, or substitute any other questions. "
             "After each answer, briefly acknowledge and move on to the next question. "
             "If the candidate has already answered a question implicitly, briefly confirm and proceed. "
             "If interrupted, stop speaking and listen (barge-in). "
             "Conclude politely after the final question.\n\n"
-            "Questions:\n"
-            f"{enumerated}"
+            "Questions (by section):\n"
+            f"{questions_block}"
         )
     else:
         # Generic fallback (less strict if no interview provided)
@@ -259,6 +373,10 @@ def realtime_session(request):
         "model": model,
         "voice": "verse",
         "modalities": ["text", "audio"],
+        # Enable server-side speech-to-text so we can show user's transcript in the UI
+        "input_audio_transcription": {
+            "model": "whisper-1"
+        },
         "turn_detection": {
             "type": "server_vad",
             "threshold": 0.5,
@@ -293,3 +411,32 @@ def realtime_session(request):
         return JsonResponse({"error": "Failed to create session", "details": err_body}, status=e.code)
     except Exception as e:
         return JsonResponse({"error": "Internal server error", "details": str(e)}, status=500)
+
+
+@require_http_methods(["GET"])
+def ai_interview_info(request, pk):
+    """
+    Information page to collect candidate name and email before live interview.
+    Consolidated here to avoid duplicate modules (ai_views.py removed).
+    """
+    interview = get_object_or_404(Interview, pk=pk, is_active=True)
+    return render(request, 'interviews/ai_voice_info.html', {'interview': interview})
+
+
+@require_http_methods(["GET"])
+def ai_interview_start(request, pk):
+    """
+    Start the AI conversational interview (live realtime WebRTC page).
+    Consolidated here to avoid duplicate modules (ai_views.py removed).
+    """
+    interview = get_object_or_404(Interview, pk=pk, is_active=True)
+    # Provide ordered sections with their questions for the live UI (tabs + collected info)
+    sections = interview.sections.all().order_by("order", "id").prefetch_related("questions")
+    return render(
+        request,
+        'interviews/ai_voice_interview.html',
+        {
+            'interview': interview,
+            'sections': sections,
+        }
+    )

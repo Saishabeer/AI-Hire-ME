@@ -13,294 +13,516 @@
             <i class="fas fa-edit mr-2"></i>{{ interview.title }}
         </h1>
         <p class="opacity-90">{{ interview.description }}</p>
-        <div class="flex space-x-4 mt-4">
-            <a href="{% url 'interviews:preview' interview.pk %}" class="bg-white text-purple-600 px-4 py-2 rounded-lg font-medium hover:bg-gray-100 transition">
-                <i class="fas fa-eye mr-2"></i>Preview Form
+        <div class="flex space-x-4 mt-4 flex-wrap">
+            <button id="save-changes-btn" class="btn btn-primary">
+                <i class="fas fa-save"></i> Save changes
+            </button>
+            <a href="{% url 'interviews:preview' interview.pk %}" class="btn btn-secondary">
+                <i class="fas fa-eye"></i> Preview Form
             </a>
-            <a href="{% url 'interviews:responses' interview.pk %}" class="bg-white text-purple-600 px-4 py-2 rounded-lg font-medium hover:bg-gray-100 transition">
-                <i class="fas fa-chart-bar mr-2"></i>View Responses
+            <a href="{% url 'interviews:responses' interview.pk %}" class="btn btn-secondary">
+                <i class="fas fa-chart-bar"></i> View Responses
+            </a>
+            <a href="{% url 'interviews:list' %}" class="btn btn-outline">
+                <i class="fas fa-arrow-left"></i> Back to Interviews
             </a>
         </div>
     </div>
 
-    <!-- Questions -->
-    <div id="questions-container" class="space-y-4">
-        {% for question in questions %}
-        <div class="bg-white rounded-lg shadow-lg p-6 question-card" data-question-id="{{ question.id }}">
-            <div class="flex justify-between items-start mb-4">
-                <input 
-                    type="text" 
-                    value="{{ question.question_text }}"
-                    class="flex-1 text-lg font-semibold border-0 border-b-2 border-transparent hover:border-gray-300 focus:border-purple-500 focus:outline-none question-text bg-white text-gray-900 placeholder-gray-400"
-                    placeholder="Question text"
-                >
-                <button class="text-red-500 hover:text-red-700 ml-4 delete-question">
-                    <i class="fas fa-trash"></i>
+    <!-- Interview meta (title & description) -->
+    <div class="card mb-6">
+        <form id="interview-meta-form" method="post" class="space-y-4">
+            {% csrf_token %}
+            <div class="field">
+                <label for="ititle">Interview Title</label>
+                <input id="ititle" name="title" type="text" value="{{ interview.title }}" placeholder="Interview title">
+            </div>
+            <div class="field">
+                <label for="idesc">Description</label>
+                <textarea id="idesc" name="description" rows="3" placeholder="Describe this interview...">{{ interview.description }}</textarea>
+            </div>
+            <div class="btn-row">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i> Save interview
                 </button>
+                <a href="{% url 'interviews:list' %}" class="btn btn-outline">
+                    <i class="fas fa-arrow-left"></i> Back to Interviews
+                </a>
             </div>
+        </form>
+    </div>
 
-            <div class="flex items-center space-x-4 mb-4">
-                <select class="question-type border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900">
-                    <option value="text" {% if question.question_type == 'text' %}selected{% endif %}>Short Answer</option>
-                    <option value="textarea" {% if question.question_type == 'textarea' %}selected{% endif %}>Detailed Answer</option>
-                    <option value="multiple_choice" {% if question.question_type == 'multiple_choice' %}selected{% endif %}>Multiple Choice</option>
-                </select>
-                
-                <label class="flex items-center">
-                    <input type="checkbox" class="question-required mr-2" {% if question.is_required %}checked{% endif %}>
-                    <span class="text-sm text-gray-700">Required</span>
-                </label>
-            </div>
+    <!-- Builder grouped by section (like Google Forms) -->
+    <div id="builder" class="space-y-6">
+        <!-- General section removed: all questions must belong to a section -->
 
-            {% if question.question_type == 'multiple_choice' %}
-            <div class="options-container space-y-2 ml-4">
-                {% for option in question.options.all %}
-                <div class="flex items-center space-x-2 option-item" data-option-id="{{ option.id }}">
-                    <i class="fas fa-circle text-gray-400 text-xs"></i>
-                    <input 
-                        type="text" 
-                        value="{{ option.option_text }}"
-                        class="flex-1 border-0 border-b border-gray-300 focus:border-purple-500 focus:outline-none option-text bg-white text-gray-900 placeholder-gray-400"
-                        placeholder="Option text"
-                    >
-                    <button class="text-red-500 hover:text-red-700 delete-option">
-                        <i class="fas fa-times"></i>
-                    </button>
+        {% for s in sections %}
+        <div class="card section-card" data-section-id="{{ s.id }}">
+            <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-2">
+                    <span class="text-sm text-gray-400">Section</span>
+                    <input class="section-title border border-gray-300 rounded-lg px-3 py-2" value="{{ s.title }}" placeholder="Section Title" />
                 </div>
-                {% endfor %}
-                <button class="text-purple-600 hover:text-purple-700 text-sm add-option">
-                    <i class="fas fa-plus mr-1"></i>Add option
-                </button>
+                <div class="btn-row">
+                    <button class="btn btn-secondary save-section"><i class="fas fa-save"></i> Save</button>
+                    <button class="btn btn-danger delete-section"><i class="fas fa-trash"></i> Delete</button>
+                    <button class="btn btn-secondary add-question-in-section" data-section-id="{{ s.id }}"><i class="fas fa-plus"></i> Add Question</button>
+                </div>
             </div>
-            {% endif %}
+            <div class="questions-list space-y-4">
+                {% for question in questions %}
+                {% if question.section_id == s.id %}
+                <div class="bg-white rounded-lg shadow-lg p-6 question-card" data-question-id="{{ question.id }}">
+                    <div class="flex justify-between items-start mb-4">
+                        <input 
+                            type="text" 
+                            value="{{ question.question_text }}"
+                            class="flex-1 text-lg font-semibold border-0 border-b-2 border-transparent hover:border-gray-300 focus:border-purple-500 focus:outline-none question-text bg-white text-gray-900 placeholder-gray-400"
+                            placeholder="Question text"
+                        >
+                        <button class="text-red-500 hover:text-red-700 ml-4 delete-question">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                    <div class="flex items-center space-x-4 mb-4">
+                        <select class="question-type border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900">
+                            <option value="text" {% if question.question_type == 'text' %}selected{% endif %}>Short Answer</option>
+                            <option value="textarea" {% if question.question_type == 'textarea' %}selected{% endif %}>Detailed Answer</option>
+                            <option value="multiple_choice" {% if question.question_type == 'multiple_choice' %}selected{% endif %}>Multiple Choice</option>
+                        </select>
+                        <select class="question-section border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900">
+                            <option value="">Move to section…</option>
+                            {% for s2 in sections %}
+                                <option value="{{ s2.id }}" {% if s2.id == s.id %}selected{% endif %}>{{ s2.title }}</option>
+                            {% endfor %}
+                        </select>
+                        <label class="flex items-center">
+                            <input type="checkbox" class="question-required mr-2" {% if question.is_required %}checked{% endif %}>
+                            <span class="text-sm text-gray-700">Required</span>
+                        </label>
+                    </div>
+                    {% if question.question_type == 'multiple_choice' %}
+                    <div class="options-container space-y-2 ml-4">
+                        {% for option in question.options.all %}
+                        <div class="flex items-center space-x-2 option-item" data-option-id="{{ option.id }}">
+                            <i class="fas fa-circle text-gray-400 text-xs"></i>
+                            <input 
+                                type="text" 
+                                value="{{ option.option_text }}"
+                                class="flex-1 border-0 border-b border-gray-300 focus:border-purple-500 focus:outline-none option-text bg-white text-gray-900 placeholder-gray-400"
+                                placeholder="Option text"
+                            >
+                            <button class="text-red-500 hover:text-red-700 delete-option">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        {% endfor %}
+                        <button class="text-purple-600 hover:text-purple-700 text-sm add-option">
+                            <i class="fas fa-plus mr-1"></i>Add option
+                        </button>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
         </div>
         {% endfor %}
     </div>
 
-    <!-- Add Question Button -->
+    <!-- Add Section (global) -->
     <div class="mt-6">
-        <button id="add-question-btn" class="w-full bg-white hover:bg-gray-50 border-2 border-dashed border-purple-300 text-purple-600 rounded-lg py-4 font-medium transition">
-            <i class="fas fa-plus-circle mr-2"></i>Add Question
+        <button id="add-section-global" class="w-full btn btn-secondary">
+            <i class="fas fa-plus"></i> Add Section
         </button>
     </div>
 
     <!-- Action Buttons -->
     <div class="mt-6 space-y-4">
-        <!-- Primary Actions -->
-        <div class="grid grid-cols-2 gap-4">
-            <a href="{% url 'interviews:ai_interview' interview.pk %}" class="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white px-6 py-3 rounded-lg font-medium text-center transition">
-                <i class="fas fa-robot mr-2"></i>Start AI Interview
+        <div class="btn-row">
+            <button id="save-changes-btn-bottom" class="btn btn-primary">
+                <i class="fas fa-save"></i> Save changes
+            </button>
+            <a href="{% url 'interviews:ai_interview' interview.pk %}" class="btn btn-success">
+                <i class="fas fa-robot"></i> Start AI Interview
             </a>
-            <a href="{% url 'interviews:responses' interview.pk %}" class="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium text-center transition">
-                <i class="fas fa-chart-bar mr-2"></i>View Responses
+            <a href="{% url 'interviews:responses' interview.pk %}" class="btn btn-secondary">
+                <i class="fas fa-chart-bar"></i> View Responses
+            </a>
+            <a href="{% url 'interviews:list' %}" class="btn btn-outline">
+                <i class="fas fa-arrow-left"></i> Back to Interviews
             </a>
         </div>
-        
+
         <!-- Share Link -->
-        <div class="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg p-4 border-2 border-purple-200">
-            <p class="text-sm font-semibold text-gray-800 mb-3">
-                <i class="fas fa-share-alt text-purple-600 mr-2"></i>Share AI Interview Link:
+        <div class="card">
+            <p class="text-sm font-semibold mb-3">
+                <i class="fas fa-share-alt mr-2"></i>Share AI Interview Link:
             </p>
             <div class="flex items-center space-x-2">
-                <input type="text" value="http://localhost:8000{% url 'interviews:ai_interview' interview.pk %}" readonly class="flex-1 px-4 py-3 text-sm bg-white border-2 border-purple-300 rounded-lg text-gray-700 font-mono" id="ai-link">
-                <button onclick="copyLink('ai-link')" class="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-lg transition font-medium">
-                    <i class="fas fa-copy mr-2"></i>Copy Link
+                <input type="text" value="http://localhost:8000{% url 'interviews:ai_interview' interview.pk %}" readonly class="flex-1" id="ai-link">
+                <button onclick="copyLink('ai-link')" class="btn btn-secondary">
+                    <i class="fas fa-copy"></i> Copy Link
                 </button>
             </div>
         </div>
-        
-        <!-- Back Button -->
-        <a href="{% url 'interviews:list' %}" class="block w-full text-center bg-gray-500 hover:bg-gray-600 text-white px-6 py-3 rounded-lg font-medium transition">
-            <i class="fas fa-arrow-left mr-2"></i>Back to Interviews
-        </a>
     </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]').value;
-    
-    // Helper function to show notifications
+    const builder = document.getElementById('builder');
+
     function showNotification(message, type = 'success') {
-        const colors = {
-            success: 'bg-green-500',
-            error: 'bg-red-500',
-            info: 'bg-blue-500'
-        };
-        
-        const notification = document.createElement('div');
-        notification.className = `fixed top-4 right-4 ${colors[type]} text-white px-6 py-3 rounded-lg shadow-lg z-50 transition-opacity duration-300`;
-        notification.textContent = message;
-        document.body.appendChild(notification);
-        
-        setTimeout(() => {
-            notification.style.opacity = '0';
-            setTimeout(() => notification.remove(), 300);
-        }, 3000);
+        const colors = { success: 'bg-green-500', error: 'bg-red-500', info: 'bg-blue-500' };
+        const el = document.createElement('div');
+        el.className = `fixed top-4 right-4 ${colors[type]} text-white px-6 py-3 rounded-lg shadow-lg z-50 transition-opacity duration-300`;
+        el.textContent = message;
+        document.body.appendChild(el);
+        setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 2000);
     }
-    
-    // Add new question
-    document.getElementById('add-question-btn').addEventListener('click', async function() {
-        const btn = this;
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Adding...';
-        
-        try {
-            const response = await fetch('{% url "interviews:edit" interview.pk %}', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': csrftoken,
-                    'X-Requested-With': 'XMLHttpRequest'
-                },
-                body: JSON.stringify({
-                    action: 'add_question',
-                    question_text: 'Untitled Question',
-                    question_type: 'text',
-                    is_required: true
-                })
-            });
-            
-            if (response.ok) {
-                showNotification('Question added successfully!', 'success');
-                setTimeout(() => location.reload(), 500);
-            } else {
-                throw new Error('Failed to add question');
+
+    function postJSON(payload) {
+        return fetch('{% url "interviews:edit" interview.pk %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrftoken,
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify(payload)
+        });
+    }
+
+    function escapeHtml(str) {
+        const p = document.createElement('p');
+        p.textContent = str ?? '';
+        return p.innerHTML;
+    }
+
+    // In-memory sections list for client-side UI (built from server context)
+    let SECTIONS = [
+        {% for s in sections %}{ id: {{ s.id }}, title: "{{ s.title|escapejs }}" }{% if not forloop.last %},{% endif %}{% endfor %}
+    ];
+
+    function sectionSelectHTML(selectedId) {
+        let opts = '<option value="">Move to section…</option>';
+        for (const s of SECTIONS) {
+            const sel = String(selectedId) === String(s.id) ? 'selected' : '';
+            opts += `<option value="${s.id}" ${sel}>${escapeHtml(s.title)}</option>`;
+        }
+        return `<select class="question-section border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900">${opts}</select>`;
+    }
+
+    function createOptionsContainer() {
+        const c = document.createElement('div');
+        c.className = 'options-container space-y-2 ml-4';
+        const add = document.createElement('button');
+        add.className = 'text-purple-600 hover:text-purple-700 text-sm add-option';
+        add.innerHTML = '<i class="fas fa-plus mr-1"></i>Add option';
+        c.appendChild(add);
+        return c;
+    }
+
+    function createQuestionCard(q) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'bg-white rounded-lg shadow-lg p-6 question-card';
+        wrapper.dataset.questionId = q.id;
+
+        wrapper.innerHTML = `
+            <div class="flex justify-between items-start mb-4">
+                <input type="text" value="${escapeHtml(q.text)}" class="flex-1 text-lg font-semibold border-0 border-b-2 border-transparent hover:border-gray-300 focus:border-purple-500 focus:outline-none question-text bg-white text-gray-900 placeholder-gray-400" placeholder="Question text">
+                <button class="text-red-500 hover:text-red-700 ml-4 delete-question"><i class="fas fa-trash"></i></button>
+            </div>
+            <div class="flex items-center space-x-4 mb-4">
+                <select class="question-type border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900">
+                    <option value="text" ${q.type === 'text' ? 'selected' : ''}>Short Answer</option>
+                    <option value="textarea" ${q.type === 'textarea' ? 'selected' : ''}>Detailed Answer</option>
+                    <option value="multiple_choice" ${q.type === 'multiple_choice' ? 'selected' : ''}>Multiple Choice</option>
+                </select>
+                ${sectionSelectHTML(q.section_id)}
+                <label class="flex items-center">
+                    <input type="checkbox" class="question-required mr-2" ${q.required ? 'checked' : ''}>
+                    <span class="text-sm text-gray-700">Required</span>
+                </label>
+            </div>
+        `;
+        if (q.type === 'multiple_choice') {
+            const oc = createOptionsContainer();
+            if (q.options && q.options.length) {
+                q.options.forEach(o => {
+                    const row = document.createElement('div');
+                    row.className = 'flex items-center space-x-2 option-item';
+                    row.dataset.optionId = o.id || '';
+                    row.innerHTML = `
+                        <i class="fas fa-circle text-gray-400 text-xs"></i>
+                        <input type="text" value="${escapeHtml(o.text)}" class="flex-1 border-0 border-b border-gray-300 focus:border-purple-500 focus:outline-none option-text bg-white text-gray-900 placeholder-gray-400" placeholder="Option text">
+                        <button class="text-red-500 hover:text-red-700 delete-option"><i class="fas fa-times"></i></button>
+                    `;
+                    oc.insertBefore(row, oc.firstChild);
+                });
             }
-        } catch (error) {
-            showNotification('Error adding question. Please try again.', 'error');
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-plus-circle mr-2"></i>Add Question';
+            wrapper.appendChild(oc);
+        }
+        return wrapper;
+    }
+
+    function moveCardToSectionList(card, sectionId) {
+        const destCard = document.querySelector(`.section-card[data-section-id="${sectionId}"]`);
+        const list = destCard?.querySelector('.questions-list');
+        if (list) list.appendChild(card);
+    }
+
+    // Add Question inside a section (no page reload)
+    builder.addEventListener('click', async function (e) {
+        const addBtn = e.target.closest('.add-question-in-section');
+        if (!addBtn) return;
+        e.preventDefault();
+        const secId = addBtn.dataset.sectionId || null;
+        const secCard = addBtn.closest('.section-card');
+        const list = secCard.querySelector('.questions-list');
+
+        const prev = addBtn.innerHTML;
+        addBtn.disabled = true;
+        addBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Adding...';
+
+        try {
+            const r = await postJSON({
+                action: 'add_question',
+                section_id: secId,
+                question_text: 'Untitled Question',
+                question_type: 'text',
+                is_required: true
+            });
+            if (!r.ok) throw new Error();
+            const js = await r.json();
+            const card = createQuestionCard({
+                id: js.question_id,
+                text: 'Untitled Question',
+                type: 'text',
+                required: true,
+                section_id: secId,
+                options: []
+            });
+            list.appendChild(card);
+            showNotification('Question added', 'success');
+        } catch {
+            showNotification('Error adding question', 'error');
+        } finally {
+            addBtn.disabled = false;
+            addBtn.innerHTML = prev;
         }
     });
-    
-    // Update question on change
-    document.querySelectorAll('.question-text, .question-type, .question-required').forEach(el => {
-        el.addEventListener('change', async function() {
-            const card = this.closest('.question-card');
-            const questionId = card.dataset.questionId;
-            
-            await fetch('{% url "interviews:edit" interview.pk %}', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': csrftoken,
-                    'X-Requested-With': 'XMLHttpRequest'
-                },
-                body: JSON.stringify({
-                    action: 'update_question',
-                    question_id: questionId,
-                    question_text: card.querySelector('.question-text').value,
-                    question_type: card.querySelector('.question-type').value,
-                    is_required: card.querySelector('.question-required').checked
-                })
-            });
-            
-            if (this.classList.contains('question-type')) {
-                location.reload();
+
+    // Event delegation for changes
+    builder.addEventListener('change', async function (e) {
+        const target = e.target;
+        const card = target.closest('.question-card');
+        if (!card) return;
+
+        const questionId = card.dataset.questionId;
+
+        if (target.classList.contains('question-text') ||
+            target.classList.contains('question-type') ||
+            target.classList.contains('question-required')) {
+
+            const payload = {
+                action: 'update_question',
+                question_id: questionId,
+                question_text: card.querySelector('.question-text').value,
+                question_type: card.querySelector('.question-type').value,
+                is_required: card.querySelector('.question-required').checked
+            };
+            await postJSON(payload);
+
+            // Adjust UI for type changes without reload
+            if (target.classList.contains('question-type')) {
+                const type = card.querySelector('.question-type').value;
+                const existing = card.querySelector('.options-container');
+                if (type === 'multiple_choice' && !existing) {
+                    card.appendChild(createOptionsContainer());
+                } else if (type !== 'multiple_choice' && existing) {
+                    existing.remove();
+                }
             }
-        });
+        }
+
+        if (target.classList.contains('option-text')) {
+            const item = target.closest('.option-item');
+            const optionId = item.dataset.optionId;
+            await postJSON({ action: 'update_option', option_id: optionId, option_text: target.value });
+        }
+
+        if (target.classList.contains('question-section')) {
+            const sectionId = target.value || null;
+            const r = await postJSON({ action: 'move_question', question_id: questionId, section_id: sectionId });
+            if (r.ok) {
+                moveCardToSectionList(card, sectionId);
+                showNotification('Question moved', 'info');
+            }
+        }
     });
-    
-    // Delete question
-    document.querySelectorAll('.delete-question').forEach(btn => {
-        btn.addEventListener('click', async function() {
+
+    // Trim and auto-save section titles on blur to avoid stray whitespace/placeholder artifacts
+    builder.addEventListener('blur', async function (e) {
+        const input = e.target && e.target.classList && e.target.classList.contains('section-title') ? e.target : null;
+        if (!input) return;
+        const row = input.closest('.section-card');
+        if (!row) return;
+        const id = row.dataset.sectionId;
+        let title = (input.value || 'Untitled Section').trim().replace(/\s+/g, ' ');
+        input.value = title;
+        try {
+            await postJSON({ action: 'update_section', section_id: id, title });
+            if (id) {
+                for (const s of SECTIONS) { if (String(s.id) === String(id)) { s.title = title; break; } }
+            }
+        } catch (err) {
+            // ignore errors on blur (user can still press Save)
+        }
+    }, true);
+
+    // Event delegation for clicks (delete/add + section ops)
+    builder.addEventListener('click', async function (e) {
+        const btn = e.target.closest('button');
+        if (!btn) return;
+
+        if (btn.classList.contains('save-section')) {
+            const row = btn.closest('.section-card');
+            const id = row.dataset.sectionId;
+            const input = row.querySelector('.section-title');
+            let title = (input?.value || 'Untitled Section').trim().replace(/\s+/g, ' ');
+            if (input) input.value = title;
+            await postJSON({ action: 'update_section', section_id: id, title });
+            // update list
+            if (id) {
+                for (const s of SECTIONS) { if (String(s.id) === String(id)) { s.title = title; break; } }
+            }
+            showNotification('Section saved', 'success');
+            return;
+        }
+
+        if (btn.classList.contains('delete-section')) {
+            if (!confirm('Delete this section? Questions will not be deleted.')) return;
+            const row = btn.closest('.section-card');
+            const id = row.dataset.sectionId;
+            const r = await postJSON({ action: 'delete_section', section_id: id });
+            if (r.ok) {
+                let fallbackId = null;
+                try {
+                    const js = await r.json();
+                    fallbackId = js && js.fallback_section_id ? String(js.fallback_section_id) : null;
+                } catch (e) {
+                    fallbackId = null;
+                }
+                if (fallbackId) {
+                    const destList = document.querySelector(`.section-card[data-section-id="${fallbackId}"] .questions-list`);
+                    if (destList) {
+                        const cards = Array.from(row.querySelectorAll('.question-card'));
+                        cards.forEach(card => {
+                            destList.appendChild(card);
+                            const sel = card.querySelector('.question-section');
+                            if (sel) sel.value = fallbackId;
+                        });
+                    }
+                }
+                row.remove();
+                // drop from list
+                SECTIONS = SECTIONS.filter(s => String(s.id) !== String(id));
+                showNotification('Section deleted', 'success');
+            }
+            return;
+        }
+        
+        if (btn.classList.contains('delete-question')) {
             if (!confirm('Delete this question?')) return;
-            
-            const card = this.closest('.question-card');
+            const card = btn.closest('.question-card');
             const questionId = card.dataset.questionId;
-            
-            const response = await fetch('{% url "interviews:edit" interview.pk %}', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': csrftoken,
-                    'X-Requested-With': 'XMLHttpRequest'
-                },
-                body: JSON.stringify({
-                    action: 'delete_question',
-                    question_id: questionId
-                })
-            });
-            
-            if (response.ok) {
-                card.remove();
-            }
-        });
-    });
-    
-    // Add option
-    document.querySelectorAll('.add-option').forEach(btn => {
-        btn.addEventListener('click', async function() {
-            const card = this.closest('.question-card');
+            const r = await postJSON({ action: 'delete_question', question_id: questionId });
+            if (r.ok) card.remove();
+            return;
+        }
+        
+        if (btn.classList.contains('add-option')) {
+            e.preventDefault();
+            const card = btn.closest('.question-card');
             const questionId = card.dataset.questionId;
-            
-            const response = await fetch('{% url "interviews:edit" interview.pk %}', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': csrftoken,
-                    'X-Requested-With': 'XMLHttpRequest'
-                },
-                body: JSON.stringify({
-                    action: 'add_option',
-                    question_id: questionId,
-                    option_text: 'Option'
-                })
-            });
-            
-            if (response.ok) {
-                location.reload();
+            const r = await postJSON({ action: 'add_option', question_id: questionId, option_text: 'Option' });
+            if (r.ok) {
+                const js = await r.json();
+                const oc = card.querySelector('.options-container') || card.appendChild(createOptionsContainer());
+                const el = document.createElement('div');
+                el.className = 'flex items-center space-x-2 option-item';
+                el.dataset.optionId = js.option_id;
+                el.innerHTML = `
+                    <i class="fas fa-circle text-gray-400 text-xs"></i>
+                    <input type="text" value="Option" class="flex-1 border-0 border-b border-gray-300 focus:border-purple-500 focus:outline-none option-text bg-white text-gray-900 placeholder-gray-400" placeholder="Option text">
+                    <button class="text-red-500 hover:text-red-700 delete-option"><i class="fas fa-times"></i></button>
+                `;
+                oc.insertBefore(el, oc.querySelector('.add-option'));
             }
-        });
+            return;
+        }
+        
+        if (btn.classList.contains('delete-option')) {
+            e.preventDefault();
+            const item = btn.closest('.option-item');
+            const optionId = item.dataset.optionId;
+            const r = await postJSON({ action: 'delete_option', option_id: optionId });
+            if (r.ok) item.remove();
+            return;
+        }
     });
-    
-    // Delete option
-    document.querySelectorAll('.delete-option').forEach(btn => {
-        btn.addEventListener('click', async function() {
-            const optionItem = this.closest('.option-item');
-            const optionId = optionItem.dataset.optionId;
-            
-            const response = await fetch('{% url "interviews:edit" interview.pk %}', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': csrftoken,
-                    'X-Requested-With': 'XMLHttpRequest'
-                },
-                body: JSON.stringify({
-                    action: 'delete_option',
-                    option_id: optionId
-                })
-            });
-            
-            if (response.ok) {
-                optionItem.remove();
-            }
-        });
+
+    // Global Add Section button
+    document.getElementById('add-section-global')?.addEventListener('click', async function () {
+        const title = prompt('Section title', 'Untitled Section') || 'Untitled Section';
+        const r = await postJSON({ action: 'add_section', title });
+        if (!r.ok) return;
+        const js = await r.json();
+        // update section list
+        SECTIONS.push({ id: js.section_id, title });
+        // create a minimal section card DOM
+        const wrapper = document.createElement('div');
+        wrapper.className = 'card section-card';
+        wrapper.dataset.sectionId = js.section_id;
+        wrapper.innerHTML = `
+            <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-2">
+                    <span class="text-sm text-gray-400">Section</span>
+                    <input class="section-title border border-gray-300 rounded-lg px-3 py-2" value="${escapeHtml(title)}" placeholder="Section Title" />
+                </div>
+                <div class="btn-row">
+                    <button class="btn btn-secondary save-section"><i class="fas fa-save"></i> Save</button>
+                    <button class="btn btn-danger delete-section"><i class="fas fa-trash"></i> Delete</button>
+                    <button class="btn btn-secondary add-question-in-section" data-section-id="${js.section_id}"><i class="fas fa-plus"></i> Add Question</button>
+                </div>
+            </div>
+            <div class="questions-list space-y-4"></div>
+        `;
+        builder.appendChild(wrapper);
+        showNotification('Section added', 'success');
+    });
+
+    // Save buttons just confirm that changes are auto-saved
+    const topSave = document.getElementById('save-changes-btn');
+    const bottomSave = document.getElementById('save-changes-btn-bottom');
+    [topSave, bottomSave].forEach(b => {
+        if (b) b.addEventListener('click', () => showNotification('All changes saved', 'info'));
     });
 });
 
-// Copy link to clipboard function
+// Copy link to clipboard function (kept simple)
 function copyLink(inputId) {
     const input = document.getElementById(inputId);
     input.select();
-    input.setSelectionRange(0, 99999); // For mobile
-    
+    input.setSelectionRange(0, 99999);
     navigator.clipboard.writeText(input.value).then(() => {
-        // Show success message
-        const button = event.target.closest('button');
-        const originalText = button.innerHTML;
-        button.innerHTML = '<i class="fas fa-check"></i> Copied!';
-        button.classList.add('bg-green-600');
-        
-        setTimeout(() => {
-            button.innerHTML = originalText;
-            button.classList.remove('bg-green-600');
-        }, 2000);
-    }).catch(err => {
+        alert('Link copied');
+    }).catch(() => {
         alert('Failed to copy link');
     });
 }

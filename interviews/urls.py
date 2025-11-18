@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views, ai_views
+from . import views
 
 app_name = 'interviews'
 
@@ -13,17 +13,10 @@ urlpatterns = [
     path('<int:pk>/take/', views.interview_take, name='take'),
     path('<int:pk>/responses/', views.interview_responses, name='responses'),
     
-    # AI Conversational Interview (info + live)
-    path('<int:pk>/ai-interview/', ai_views.ai_interview_info, name='ai_interview'),
-    path('<int:pk>/ai-interview/live/', ai_views.ai_interview_start, name='ai_interview_live'),
+    # AI Conversational Interview (info + live) consolidated into views.py
+    path('<int:pk>/ai-interview/', views.ai_interview_info, name='ai_interview'),
+    path('<int:pk>/ai-interview/live/', views.ai_interview_start, name='ai_interview_live'),
 
-    # AI Conversational Interview API (session-scoped)
-    path('ai-interview/init/', ai_views.init_session, name='ai_interview_session_init'),
-    path('ai-interview/transcribe/', ai_views.transcribe, name='ai_interview_session_transcribe'),
-    path('ai-interview/respond/', ai_views.respond, name='ai_interview_session_respond'),
-    path('ai-interview/speak/', ai_views.speak, name='ai_interview_session_speak'),
-    path('ai-interview/submit/', ai_views.submit, name='ai_interview_session_submit'),
-
-    # Realtime: route to views.realtime_session to avoid adding new files
+    # Realtime: ephemeral token minting
     path('ai-interview/realtime/session/', views.realtime_session, name='ai_interview_realtime_session'),
 ]

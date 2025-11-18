@@ -1,215 +1,80 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>{{ interview.title }} - AI Voice Interview</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 24px; color: #0b1220; }
-    .container { max-width: 900px; margin: 0 auto; }
-    h1 { margin: 0 0 8px; }
-    .sub { color: #475569; margin: 0 0 20px; }
-    .panel { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
-    .controls { display: flex; gap: 10px; align-items: center; }
-    button { padding: 10px 14px; border: none; border-radius: 10px; font-weight: 600; cursor: pointer; }
-    #start-interview { background: #38bdf8; color: #042029; }
-    #end-interview { background: #f43f5e; color: #fff; }
-    .status { display: flex; gap: 14px; color: #334155; font-size: 14px; }
-    .hint { color: #475569; font-size: 14px; }
-    pre { background: #0b1220; color: #cbd5e1; padding: 10px; border-radius: 10px; overflow: auto; max-height: 180px; }
-    audio { display: none; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>{{ interview.title }}</h1>
-    <p class="sub">The AI will ask only the questions you configured, in order, without asking you to start/stop recording.</p>
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}{{ interview.title }} — Live AI Interview{% endblock %}
 
-    <div class="panel">
-      <div class="controls">
-        <button id="start-interview">Start interview</button>
-        <button id="end-interview">End interview</button>
-        <div class="status">
-          <span>Mic: <strong id="mic-state">off</strong></span>
-          <span>Connection: <strong id="conn-state">idle</strong></span>
-          <span>AI Audio: <strong id="ai-state">idle</strong></span>
-        </div>
-      </div>
-      <p class="hint">Tip: Your browser may require one click to allow the microphone. After that, the session stays live until you end it.</p>
-    </div>
-
-    <div class="panel">
-      <strong>Logs</strong>
-      <pre id="logs"></pre>
-    </div>
-
-    <audio id="ai-remote-audio" autoplay playsinline></audio>
+{% block content %}
+<div id="ai-interview-root" data-session-url="{% url 'interviews:ai_interview_realtime_session' %}" data-interview-id="{{ interview.id }}" style="display:none"></div>
+<div class="container page">
+  <!-- Header -->
+  <div class="card">
+    <h1 class="text-2xl font-bold mb-1">
+      <i class="fas fa-robot mr-2"></i>{{ interview.title }}
+    </h1>
+    {% if interview.description %}
+      <p class="text-gray-600">{{ interview.description }}</p>
+    {% endif %}
   </div>
 
-  <script>
-    (function () {
-      let pc = null;
-      let dc = null;
-      let localStream = null;
-      let remoteStream = null;
-      let modelInUse = null;
+  <!-- Section tabs / stepper -->
+  <div class="card">
+    <div id="section-tabs" class="stepper">
+      {% for s in sections %}
+      <div class="step-item section-tab" id="tab-{{ s.id }}" data-section-id="{{ s.id }}" data-answered="0" data-total="{{ s.questions.all|length }}">
+        <div class="dot"></div>
+        <div class="label">{{ s.title }}</div>
+        <div class="count text-xs"><span class="answered">0</span>/<span class="total">{{ s.questions.all|length }}</span> answered</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
 
-      const micStateEl = document.getElementById("mic-state");
-      const connStateEl = document.getElementById("conn-state");
-      const aiStateEl = document.getElementById("ai-state");
-      const logsEl = document.getElementById("logs");
+  <!-- Two-panel layout -->
+  <div class="grid grid-2">
+    <!-- Collected info (left) -->
+    <div class="card" id="collected-card">
+      <div class="text-sm text-gray-400 uppercase tracking-wide">Collected Information</div>
+      <div class="text-xs text-gray-500 mb-4">Form details and progress</div>
+      <div id="collected-info" class="space-y-6">
+        {% for s in sections %}
+        <div class="section-block">
+          <h3 class="text-lg font-bold mb-3">{{ s.title }}</h3>
+          <div class="space-y-3">
+            {% for q in s.questions.all %}
+            <div class="qa" data-question-id="{{ q.id }}" data-section-id="{{ s.id }}">
+              <div class="bubble bubble-q">{{ q.question_text }}</div>
+              <div class="bubble bubble-a answer" id="ans-{{ q.id }}"></div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
 
-      function log(line, obj) {
-        const t = new Date().toISOString();
-        logsEl.textContent += "[" + t + "] " + line + (obj ? " " + JSON.stringify(obj) : "") + "\n";
-        logsEl.scrollTop = logsEl.scrollHeight;
-      }
+    <!-- Voice chat (right) -->
+    <div class="card" id="voice-card">
+      <div class="text-sm text-gray-400 uppercase tracking-wide">Voice Chat</div>
+      <div class="text-xs text-gray-500 mb-4">Real-time conversation</div>
+      <div id="transcript" class="chat-box">
+        <div id="transcript-list"></div>
+      </div>
+      <div class="btn-row mt-4">
+        <button id="connect-interview" class="btn btn-success"><i class="fas fa-play"></i> Connect</button>
+        <button id="pause-interview" class="btn btn-warning" disabled><i class="fas fa-pause"></i> Pause</button>
+        <button id="end-interview" class="btn btn-danger" disabled><i class="fas fa-stop"></i> End</button>
+        <span id="status-pill" class="pill pill-red">Disconnected</span>
+        <a href="{% url 'interviews:detail' interview.pk %}" class="btn btn-outline">
+          <i class="fas fa-arrow-left"></i> Back
+        </a>
+      </div>
+    </div>
+  </div>
 
-      async function createSession() {
-        const resp = await fetch("{% url 'interviews:ai_interview_realtime_session' %}", {
-          method: "POST",
-          headers: {
-            // CSRF is exempted server-side for this endpoint to simplify integration
-            "Content-Type": "application/json"
-          },
-          // Send the interview id so the server can constrain the questions
-          body: JSON.stringify({ interview_id: {{ interview.id }} })
-        });
-        if (!resp.ok) {
-          const t = await resp.text();
-          throw new Error("Failed to create realtime session: " + t);
-        }
-        return resp.json();
-      }
 
-      async function startRealtimeInterview() {
-        try {
-          document.getElementById("start-interview").disabled = true;
-          connStateEl.textContent = "creating-session";
-          const session = await createSession();
-          const ephemeralKey = session.client_secret?.value || session.client_secret;
-          modelInUse = session.model || "gpt-4o-realtime-preview-2024-12-17";
-          log("Ephemeral session created", { model: modelInUse });
+  <audio id="ai-remote-audio" autoplay playsinline></audio>
+</div>
+{% endblock %}
 
-          // Get mic once
-          localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          micStateEl.textContent = "on";
-
-          // Peer connection
-          pc = new RTCPeerConnection({ iceServers: [{ urls: ["stun:stun.l.google.com:19302"] }] });
-          pc.onconnectionstatechange = () => {
-            connStateEl.textContent = pc.connectionState;
-            log("RTCPeerConnection state", { state: pc.connectionState });
-          };
-
-          // Remote audio
-          remoteStream = new MediaStream();
-          const audioEl = document.getElementById("ai-remote-audio") || (function () {
-            const a = document.createElement("audio");
-            a.id = "ai-remote-audio";
-            a.autoplay = true;
-            a.playsInline = true;
-            a.style.display = "none";
-            document.body.appendChild(a);
-            return a;
-          })();
-          audioEl.srcObject = remoteStream;
-
-          pc.ontrack = (e) => {
-            aiStateEl.textContent = "speaking";
-            remoteStream.addTrack(e.track);
-            e.track.onended = () => { aiStateEl.textContent = "idle"; };
-          };
-
-          // Attach local mic
-          localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
-
-          // Data channel for control events
-          dc = pc.createDataChannel("oai-events");
-          dc.onopen = () => {
-            log("Data channel open.");
-            // Start now; the strict question list is already in the session instructions
-            const startEvent = {
-              type: "response.create",
-              response: {
-                instructions: "Start the interview now with question 1.",
-                modalities: ["text", "audio"]
-              }
-            };
-            dc.send(JSON.stringify(startEvent));
-          };
-          dc.onmessage = (ev) => {
-            try {
-              const msg = JSON.parse(ev.data);
-              log("Event from model", msg);
-            } catch {
-              log("Non-JSON message from model", { data: ev.data });
-            }
-          };
-          dc.onclose = () => log("Data channel closed.");
-
-          // SDP offer/answer with OpenAI Realtime
-          const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false });
-          await pc.setLocalDescription(offer);
-
-          const sdpResp = await fetch(`https://api.openai.com/v1/realtime?model=${encodeURIComponent(modelInUse)}`, {
-            method: "POST",
-            body: offer.sdp,
-            headers: {
-              Authorization: `Bearer ${ephemeralKey}`,
-              "Content-Type": "application/sdp"
-            }
-          });
-          if (!sdpResp.ok) throw new Error(await sdpResp.text());
-          const answer = await sdpResp.text();
-          await pc.setRemoteDescription({ type: "answer", sdp: answer });
-
-          window.__aiInterviewEnd__ = endRealtimeInterview; // expose an end handle if you want a button to call it
-          connStateEl.textContent = "connected";
-          log("Interview connected.");
-        } catch (e) {
-          console.error("Realtime interview failed to start:", e);
-          alert("Failed to start interview: " + e.message);
-          document.getElementById("start-interview").disabled = false;
-          connStateEl.textContent = "error";
-          log("Error", { error: e.message });
-        }
-      }
-
-      function endRealtimeInterview() {
-        try {
-          if (dc && dc.readyState === "open") dc.close();
-        } catch {}
-        try {
-          if (pc) pc.close();
-        } catch {}
-        try {
-          if (localStream) localStream.getTracks().forEach((t) => t.stop());
-        } catch {}
-        pc = null;
-        dc = null;
-        localStream = null;
-        remoteStream = null;
-        micStateEl.textContent = "off";
-        aiStateEl.textContent = "idle";
-        connStateEl.textContent = "closed";
-        document.getElementById("start-interview").disabled = false;
-        log("Interview ended.");
-      }
-
-      // Wire up buttons and attempt auto-start (browsers may require a gesture)
-      document.addEventListener("DOMContentLoaded", () => {
-        const btn = document.getElementById("start-interview");
-        const endBtn = document.getElementById("end-interview");
-        if (btn) btn.addEventListener("click", startRealtimeInterview, { once: true });
-        if (endBtn) endBtn.addEventListener("click", endRealtimeInterview);
-
-        // Attempt autoplay start; if permissions block, fall back to button
-        startRealtimeInterview().catch(() => {
-          log("Autostart blocked by browser; waiting for user gesture.");
-        });
-      });
-    })();
-  </script>
-</body>
-</html>
+{% block extra_js %}
+<script src="{% static 'js/ai_interview.js' %}"></script>
+{% endblock %}

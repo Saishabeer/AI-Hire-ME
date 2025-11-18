@@ -51,11 +51,11 @@ python manage.py runserver
 - On completion, responses are saved
 
 ## Project structure
-- `interviews/` – CRUD for interviews and responses, voice endpoints in `ai_views.py`
-- `templates/interviews/ai_voice_interview.html` – Voice UI page
-- `static/js/voice-interview.js` – Client logic (record, transcribe, respond, TTS)
-- `ai_engine/` – OpenAI client utilities
-- `config/settings.py` – Settings (loads `.env` if present)
+- `interviews/` – CRUD for interviews and responses, realtime token endpoint and pages in `views.py`
+- `templates/interviews/ai_voice_interview.html` – Live interview page (inline JS)
+- `static/css/app.css` – Single dark theme stylesheet
+- `accounts/` – Auth (login/register/logout)
+- `config/` – Django project settings and URLs
 
 ## Notes
 - `db.sqlite3`, `.env`, `staticfiles/`, and `venv/` are ignored by `.gitignore`.
@@ -112,7 +112,6 @@ Advanced options (URL query params on the live page)
 - ?disableLocalTTS=true to turn off the local speech fallback (for debugging)
 
 Where the behavior is implemented (for reference)
-- Client logic: static/js/voice-interview.js
-  - Realtime handling and audio fallback logic is in that file
-- Live page: templates/interviews/ai_voice_interview.html
-  - Includes the “Start Audio” button to comply with autoplay policies
+- Live page and logic: templates/interviews/ai_voice_interview.html (inline JS for WebRTC + OpenAI Realtime)
+- Server endpoint: interviews/views.py → realtime_session
+- Routing: interviews/urls.py

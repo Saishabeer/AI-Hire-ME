@@ -68,6 +68,7 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
+    'django.contrib.staticfiles',
     
     # Third party apps
     'rest_framework',
@@ -167,7 +168,7 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 10
 }
 
-# Login URLs
-LOGIN_URL = '/accounts/login/'
+# Ensure Django redirects use root-level auth paths
+LOGIN_URL = '/login/'
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/'

@@ -19,6 +19,20 @@ class Interview(models.Model):
         return self.title
 
 
+class Section(models.Model):
+    """Logical grouping of questions within an interview"""
+    interview = models.ForeignKey(Interview, on_delete=models.CASCADE, related_name='sections')
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    order = models.IntegerField(default=0)
+
+    class Meta:
+        ordering = ['order', 'id']
+
+    def __str__(self):
+        return f"{self.interview.title} — {self.title}"
+
+
 class Question(models.Model):
     """Questions in an interview form"""
     QUESTION_TYPES = [
@@ -28,9 +42,12 @@ class Question(models.Model):
     ]
     
     interview = models.ForeignKey(Interview, on_delete=models.CASCADE, related_name='questions')
+    # Optional section assignment; questions can be moved across sections later
+    section = models.ForeignKey(Section, null=True, blank=True, on_delete=models.SET_NULL, related_name='questions')
     question_text = models.TextField()
     question_type = models.CharField(max_length=20, choices=QUESTION_TYPES, default='text')
     is_required = models.BooleanField(default=True)
+    # Global order across the interview (kept for backward compatibility)
     order = models.IntegerField(default=0)
     
     class Meta:

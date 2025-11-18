@@ -1,50 +1,26 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Sign up</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; padding: 24px; background: #f6f8fa; }
-    .container { max-width: 520px; margin: 0 auto; background: #fff; border: 1px solid #e1e4e8; border-radius: 8px; padding: 24px; }
-    h1 { font-size: 20px; margin: 0 0 16px; }
-    .messages { margin-bottom: 12px; }
-    .message { padding: 8px 10px; border-radius: 4px; margin-bottom: 6px; }
-    .message.info { background: #e7f3ff; color: #033e8c; }
-    .message.success { background: #e6ffed; color: #066a2c; }
-    .message.warning { background: #fff5e6; color: #8a5400; }
-    .message.error { background: #ffe6e6; color: #8a0000; }
-    .non-field-errors { margin-bottom: 12px; color: #8a0000; background: #ffe6e6; padding: 8px 10px; border-radius: 4px; }
-    .field { margin-bottom: 14px; }
-    .field label { display: block; font-weight: 600; margin-bottom: 6px; }
-    .field input { width: 100%; padding: 10px 12px; border: 1px solid #d0d7de; border-radius: 6px; font-size: 14px; }
-    .field .help { font-size: 12px; color: #57606a; margin-top: 4px; }
-    .errors { color: #8a0000; font-size: 13px; margin-top: 6px; }
-    .actions { margin-top: 18px; display: flex; gap: 10px; align-items: center; }
-    button[type="submit"] { background: #2da44e; color: #fff; border: 0; padding: 10px 14px; border-radius: 6px; cursor: pointer; }
-    a { color: #0969da; text-decoration: none; }
-    a:hover { text-decoration: underline; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>Create your account</h1>
+{% extends 'base.html' %}
+{% block title %}Create account - AI Interviewer{% endblock %}
+
+{% block content %}
+<div class="container page">
+  <div class="card max-w-lg mx-auto">
+    <h1 class="text-2xl font-bold mb-4">Create your account</h1>
 
     {% if messages %}
       <div class="messages">
         {% for message in messages %}
-          <div class="message {{ message.tags|default:'info' }}">{{ message }}</div>
+          <div class="alert {% if message.tags == 'error' %}alert-error{% elif message.tags == 'success' %}alert-success{% else %}alert-info{% endif %}">{{ message }}</div>
         {% endfor %}
       </div>
     {% endif %}
 
     {% if form.non_field_errors %}
-      <div class="non-field-errors">
+      <div class="alert alert-error mb-4">
         {% for err in form.non_field_errors %}{{ err }}<br />{% endfor %}
       </div>
     {% endif %}
 
-    <form method="post" novalidate>
+    <form method="post" class="space-y-4">
       {% csrf_token %}
 
       {% for field in form.visible_fields %}
@@ -60,11 +36,17 @@
         </div>
       {% endfor %}
 
-      <div class="actions">
-        <button type="submit">Sign up</button>
-        <a href="{% url 'login' %}">Already have an account?</a>
+      <div class="btn-row">
+        <button type="submit" class="btn btn-primary">
+          <i class="fas fa-user-plus"></i>
+          Sign up
+        </button>
+        <a class="btn btn-outline" href="{% url 'auth:login' %}">
+          <i class="fas fa-sign-in-alt"></i>
+          Already have an account?
+        </a>
       </div>
     </form>
   </div>
-</body>
-</html>
+</div>
+{% endblock %}

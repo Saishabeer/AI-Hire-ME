@@ -29,19 +29,21 @@ http://localhost:8000/
 ```
 ai_hiring/
 ├── static/
-│   ├── js/
-│   │   └── voice-interview.js    # Main interview logic
 │   └── css/
-│       └── voice-interview.css   # Styles
+│       └── app.css                 # Single dark theme stylesheet
 ├── templates/
 │   └── interviews/
-│       └── ai_voice_interview.html  # Main template
-├── ai_engine/
-│   ├── openai_client.py         # OpenAI API (GPT, TTS, Whisper)
-│   ├── prompts.py               # AI prompts
-│   └── interview_session.py     # Session manager
-└── interviews/
-    └── ai_views.py              # Backend API endpoints
+│       ├── ai_voice_interview.html # Live interview page (inline JS)
+│       └── ai_voice_info.html      # Info/consent page
+├── interviews/
+│   ├── urls.py                     # Routes (including realtime session)
+│   └── views.py                    # CRUD + realtime token endpoint
+├── accounts/
+│   ├── urls.py                     # Auth routes (login/register/logout)
+│   └── views.py
+└── config/
+    ├── settings.py
+    └── urls.py
 ```
 
 ## How It Works
@@ -76,11 +78,7 @@ ai_hiring/
 
 ## API Endpoints
 
-- `POST /ai-interview/init/` - Initialize session
-- `POST /ai-interview/respond/` - Send message to AI
-- `POST /ai-interview/transcribe/` - Whisper transcription
-- `POST /ai-interview/speak/` - Text-to-speech
-- `POST /ai-interview/submit/` - Submit interview
+- `POST /interviews/ai-interview/realtime/session/` — Mint ephemeral OpenAI Realtime session token for the browser (used by the live page).
 
 ## Requirements
 

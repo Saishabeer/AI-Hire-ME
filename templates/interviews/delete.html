@@ -3,13 +3,13 @@
 {% block title %}Delete Interview - {{ interview.title }}{% endblock %}
 
 {% block content %}
-<div class="max-w-2xl mx-auto">
-  <div class="bg-white rounded-lg shadow-lg p-8 text-gray-900">
-    <h1 class="text-2xl font-bold mb-4 text-red-700">
+<div class="container page max-w-2xl mx-auto">
+  <div class="card">
+    <h1 class="text-2xl font-bold mb-4 text-red-400">
       <i class="fas fa-exclamation-triangle mr-2"></i>Delete Interview
     </h1>
 
-    <p class="text-gray-700 mb-6">
+    <p class="text-gray-600 mb-6">
       Are you sure you want to delete the interview
       <span class="font-semibold">"{{ interview.title }}"</span>?
       This action cannot be undone. All questions and responses associated with this interview will be removed.
@@ -24,12 +24,12 @@
       </ul>
     </div>
 
-    <form method="post" class="flex flex-wrap gap-3">
+    <form method="post" class="btn-row">
       {% csrf_token %}
-      <button type="submit" class="bg-red-600 hover:bg-red-700 text-white px-5 py-2 rounded-lg font-medium transition">
+      <button type="submit" class="btn btn-danger">
         <i class="fas fa-trash mr-2"></i>Yes, Delete
       </button>
-      <a href="{% url 'interviews:detail' interview.pk %}" class="bg-gray-200 hover:bg-gray-300 text-gray-900 px-5 py-2 rounded-lg font-medium transition">
+      <a href="{% url 'interviews:detail' interview.pk %}" class="btn btn-outline">
         <i class="fas fa-arrow-left mr-2"></i>Cancel
       </a>
     </form>

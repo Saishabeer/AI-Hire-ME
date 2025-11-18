@@ -3,8 +3,8 @@
 {% block title %}Start AI Interview — {{ interview.title }}{% endblock %}
 
 {% block content %}
-<div class="max-w-2xl mx-auto">
-  <div class="bg-white rounded-lg shadow-lg p-6 text-gray-900">
+<div class="container page max-w-2xl mx-auto">
+  <div class="card">
     <h1 class="text-2xl font-bold mb-2">
       <i class="fas fa-robot mr-2"></i>Start AI Interview
     </h1>
@@ -26,7 +26,7 @@
       </div>
 
       <!-- Advanced audio options (optional) -->
-      <div class="border border-gray-200 rounded p-3 mt-2">
+      <div class="card mt-2">
         <div class="text-sm font-medium text-gray-800 mb-2">
           Advanced audio options (optional)
         </div>
@@ -57,10 +57,12 @@
       </div>
 
       <div class="pt-2">
-        <button type="submit" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded">
-          <i class="fas fa-microphone mr-1"></i>Start Interview
+        <button type="submit" class="btn btn-success">
+          <i class="fas fa-microphone"></i> Start Interview
         </button>
-        <a href="{% url 'interviews:detail' interview.pk %}" class="ml-3 text-sm text-gray-600 hover:text-gray-800">Back</a>
+        <a href="{% url 'interviews:detail' interview.pk %}" class="btn btn-outline">
+          <i class="fas fa-arrow-left"></i> Back
+        </a>
       </div>
     </form>
 

@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="max-w-3xl mx-auto">
-  <div class="bg-white rounded-lg shadow-lg p-8">
+  <div class="card">
     <h1 class="text-3xl font-bold text-gray-900 mb-2">{{ interview.title }}</h1>
     {% if interview.description %}
     <p class="text-gray-700 mb-6">{{ interview.description }}</p>
@@ -38,10 +38,10 @@
     </div>
 
     <div class="mt-8 flex space-x-3">
-      <a href="{% url 'interviews:edit' interview.pk %}" class="bg-gray-200 hover:bg-gray-300 text-gray-900 px-4 py-2 rounded-lg font-medium transition">
+      <a href="{% url 'interviews:edit' interview.pk %}" class="btn btn-outline">
         <i class="fas fa-arrow-left mr-2"></i>Back to Edit
       </a>
-      <a href="{% url 'interviews:ai_interview' interview.pk %}" class="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition">
+      <a href="{% url 'interviews:ai_interview' interview.pk %}" class="btn btn-success">
         <i class="fas fa-play mr-2"></i>Start Interview
       </a>
     </div>

@@ -3,7 +3,16 @@
 {% block title %}{{ interview.title }} — Live AI Interview{% endblock %}
 
 {% block content %}
-<div id="ai-interview-root" data-session-url="{% url 'interviews:ai_interview_realtime_session' %}" data-interview-id="{{ interview.id }}" style="display:none"></div>
+<div
+  id="ai-interview-root"
+  data-session-url="{% url 'interviews:ai_interview_realtime_session' %}"
+  data-interview-id="{{ interview.id }}"
+  data-submit-url="{{ submit_url }}"
+  data-responses-url="{% if request.user.is_authenticated and request.user == interview.created_by or request.user.is_staff or request.user.is_superuser %}{% url 'interviews:responses' interview.pk %}{% else %}{% url 'interviews:detail' interview.pk %}{% endif %}"
+  data-candidate-name="{{ candidate_name|default_if_none:'' }}"
+  data-candidate-email="{{ candidate_email|default_if_none:'' }}"
+  style="display:none"
+></div>
 <div class="container page">
   <!-- Header -->
   <div class="card">

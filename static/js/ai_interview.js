@@ -30,6 +30,10 @@
   // --- Config ---
   const sessionUrl = root.dataset.sessionUrl || '';
   const interviewId = Number(root.dataset.interviewId || 0);
+  const submitUrl = root.dataset.submitUrl || '';
+  const responsesUrl = root.dataset.responsesUrl || '';
+  const candidateName = root.dataset.candidateName || '';
+  const candidateEmail = root.dataset.candidateEmail || '';
 
   // --- State ---
   let pc = null;
@@ -39,6 +43,7 @@
   let modelInUse = null;
 
   let paused = false;
+  let submitted = false;
 
   // Ordered list of QA DOM nodes across all sections
   const QA_NODES = Array.from(document.querySelectorAll('#collected-info .qa'));
@@ -150,6 +155,56 @@
     updateTabCounts();
     currentIdx = Math.min(currentIdx + 1, Math.max(0, QA_NODES.length - 1));
     updateActiveQuestionHighlight();
+  }
+
+  // Collect answers from the on-page QA list into a compact JSON structure
+  function collectAnswersFromDom() {
+    const out = [];
+    QA_NODES.forEach((qa) => {
+      const qid = Number(qa.dataset.questionId || qa.getAttribute('data-question-id') || 0);
+      const ansEl = qa.querySelector('.answer');
+      const text = String((ansEl && ansEl.textContent) || '').trim();
+      if (qid > 0) {
+        out.push({ question: qid, text, option_ids: [] });
+      }
+    });
+    return out;
+  }
+
+  // Build a simple transcript string from the chat bubbles
+  function collectTranscriptText() {
+    const rows = Array.from(document.querySelectorAll('#transcript-list .bubble'));
+    return rows.map(r => String(r.textContent || '').trim()).filter(Boolean).join('\n');
+  }
+
+  async function submitPayload(source = 'realtime') {
+    if (!submitUrl || submitted) return;
+    const payload = {
+      candidate_name: candidateName || 'Anonymous',
+      candidate_email: candidateEmail || 'anonymous@example.com',
+      answers: collectAnswersFromDom(),
+      transcript: collectTranscriptText(),
+      source
+    };
+    try {
+      const resp = await fetch(submitUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!resp.ok) {
+        const t = await resp.text().catch(() => '');
+        console.error('Failed to submit interview JSON', t);
+        return;
+      }
+      submitted = true;
+      if (responsesUrl) {
+        // Navigate to responses page to confirm persistence
+        window.location.href = responsesUrl;
+      }
+    } catch (e) {
+      console.error('Submit error', e);
+    }
   }
 
   // --- RTC / Realtime ---
@@ -275,7 +330,9 @@
     }
   }
 
-  function endRealtimeInterview() {
+  async function endRealtimeInterview() {
+    // Attempt to submit transcript + answers JSON before tearing down UI
+    try { await submitPayload('realtime'); } catch (e) { console.error('Submit during end failed', e); }
     try {
       if (dc && dc.readyState === 'open') dc.close();
     } catch {}

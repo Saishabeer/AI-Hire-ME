@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Interview, Question, QuestionOption, InterviewResponse, Answer
+from .models import Interview, Question, QuestionOption, InterviewResponse, Answer, Candidate
 
 
 class QuestionOptionInline(admin.TabularInline):
@@ -44,9 +44,9 @@ class QuestionOptionAdmin(admin.ModelAdmin):
 
 @admin.register(InterviewResponse)
 class InterviewResponseAdmin(admin.ModelAdmin):
-    list_display = ('candidate_name', 'candidate_email', 'interview', 'submitted_at')
+    list_display = ('candidate', 'candidate_email', 'interview', 'submitted_at')
     list_filter = ('interview', 'submitted_at')
-    search_fields = ('candidate_name', 'candidate_email')
+    search_fields = ('candidate_name', 'candidate_email', 'candidate__full_name', 'candidate__email')
     inlines = [AnswerInline]
 
 
@@ -54,4 +54,10 @@ class InterviewResponseAdmin(admin.ModelAdmin):
 class AnswerAdmin(admin.ModelAdmin):
     list_display = ('response', 'question', 'answer_text')
     list_filter = ('response__interview',)
-    search_fields = ('answer_text', 'response__candidate_name')
+    search_fields = ('answer_text', 'response__candidate_name', 'response__candidate__full_name', 'response__candidate__email')
+
+@admin.register(Candidate)
+class CandidateAdmin(admin.ModelAdmin):
+    list_display = ('full_name', 'email', 'phone', 'location', 'created_at')
+    search_fields = ('full_name', 'email', 'phone', 'location')
+    list_filter = ('created_at',)

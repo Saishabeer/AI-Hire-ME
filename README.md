@@ -58,7 +58,8 @@ python manage.py runserver
 - `config/` – Django project settings and URLs
 
 ## Notes
-- `db.sqlite3`, `.env`, `staticfiles/`, and `venv/` are ignored by `.gitignore`.
+- Uses PostgreSQL by default; configure via environment variables (`POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST`, `POSTGRES_PORT`). SQLite is not used.
+- `.env`, `staticfiles/`, and `venv/` are ignored by `.gitignore`.
 - Requires a valid OpenAI API key in `.env`.
 
 ## License

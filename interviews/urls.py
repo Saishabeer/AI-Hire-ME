@@ -11,6 +11,7 @@ urlpatterns = [
     path('<int:pk>/preview/', views.interview_preview, name='preview'),
     path('<int:pk>/delete/', views.interview_delete, name='delete'),
     path('<int:pk>/take/', views.interview_take, name='take'),
+    path('<int:pk>/submit/', views.interview_submit_json, name='submit_json'),
     path('<int:pk>/responses/', views.interview_responses, name='responses'),
     
     # AI Conversational Interview (info + live) consolidated into views.py

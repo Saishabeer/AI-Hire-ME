@@ -3,7 +3,12 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
-from .models import Interview, Section, Question, QuestionOption, InterviewResponse, Answer
+from .models import Interview, Section, Question, QuestionOption, InterviewResponse, Answer, Candidate
+from .serializers import SubmitResponseSerializer
+from rest_framework.decorators import api_view, permission_classes, authentication_classes
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from django.urls import reverse
 import json
 
 # Added imports for realtime session minting
@@ -248,46 +253,86 @@ def interview_take(request, pk):
 
         if not candidate_name or not candidate_email:
             messages.error(request, 'Name and email are required')
-            # Redirect back to AI interview info page
-            return redirect('interviews:ai_interview', pk=pk)
+            # Redirect back to take page instead of showing an error page
+            return redirect('interviews:take', pk=pk)
 
-        # Create response
+        # Normalize candidate entity
+        candidate, _ = Candidate.objects.get_or_create(
+            email=candidate_email,
+            defaults={'full_name': candidate_name}
+        )
+        # If we discovered name now and profile lacks it, update
+        if not candidate.full_name and candidate_name:
+            candidate.full_name = candidate_name
+            candidate.save(update_fields=['full_name'])
+
+        # Create response (keep legacy fields for search/back-compat)
         response = InterviewResponse.objects.create(
             interview=interview,
-            candidate_name=candidate_name,
-            candidate_email=candidate_email
+            candidate=candidate,
+            candidate_name=candidate.full_name or candidate_name,
+            candidate_email=candidate.email
         )
 
-        # Save answers
+        # Save answers (relational) and build compact JSON snapshot
+        answers_snapshot = []
         for question in interview.questions.all():
             answer = Answer.objects.create(response=response, question=question)
 
             if question.question_type in ['text', 'textarea']:
-                answer.answer_text = request.POST.get(f'question_{question.id}', '') or ''
+                text_val = request.POST.get(f'question_{question.id}', '') or ''
+                answer.answer_text = text_val
                 answer.save()
+                answers_snapshot.append({
+                    'question': question.id,
+                    'question_text': question.question_text,
+                    'text': text_val,
+                    'option_ids': [],
+                    'option_labels': [],
+                })
 
             elif question.question_type == 'multiple_choice':
                 option_id = request.POST.get(f'question_{question.id}')
+                opt_ids, opt_labels = [], []
                 if option_id:
                     try:
                         opt_id_int = int(option_id)
                         option = QuestionOption.objects.get(pk=opt_id_int, question=question)
                         answer.selected_options.add(option)
+                        opt_ids = [option.id]
+                        opt_labels = [option.option_text]
                     except (QuestionOption.DoesNotExist, ValueError, TypeError):
                         # Ignore invalid option values
                         pass
+                answers_snapshot.append({
+                    'question': question.id,
+                    'question_text': question.question_text,
+                    'text': '',
+                    'option_ids': opt_ids,
+                    'option_labels': opt_labels,
+                })
+
+        # Attach JSON snapshot for easy export/reporting
+        response.answers_json = {'answers': answers_snapshot, 'source': 'form'}
+        response.save(update_fields=['answers_json'])
 
         messages.success(request, 'Interview submitted successfully!')
-        return redirect('interviews:list')
+        # Redirect owner (and staff/admin) to responses; others to public detail page
+        if request.user.is_authenticated and (request.user == interview.created_by or request.user.is_staff or request.user.is_superuser):
+            return redirect('interviews:responses', pk=pk)
+        return redirect('interviews:detail', pk=pk)
 
-    return render(request, 'interviews/ai_voice_interview.html', {'interview': interview})
+    return render(request, 'interviews/take.html', {'interview': interview})
 
 
 @login_required
 @require_http_methods(["GET"])
 def interview_responses(request, pk):
-    """View responses for an interview"""
-    interview = get_object_or_404(Interview, pk=pk, created_by=request.user)
+    """View responses for an interview (owner-only; staff/admin allowed). Non-owners are redirected to detail."""
+    interview = get_object_or_404(Interview, pk=pk)
+    if not request.user.is_authenticated or (request.user != interview.created_by and not request.user.is_staff and not request.user.is_superuser):
+        messages.error(request, "You do not have permission to view responses for this interview.")
+        return redirect('interviews:detail', pk=pk)
     responses = interview.responses.all()
     return render(request, 'interviews/responses.html', {'interview': interview, 'responses': responses})
 
@@ -438,5 +483,128 @@ def ai_interview_start(request, pk):
         {
             'interview': interview,
             'sections': sections,
+            'candidate_name': (request.GET.get('name') or '').strip(),
+            'candidate_email': (request.GET.get('email') or '').strip(),
+            'submit_url': reverse('interviews:submit_json', args=[pk]),
         }
     )
+
+# === JSON submission API (used by voice/JS and external clients) ===
+@api_view(["POST"])
+@authentication_classes([])  # no SessionAuthentication -> no CSRF requirement
+@permission_classes([AllowAny])
+def interview_submit_json(request, pk):
+    """
+    Accepts JSON submission for an interview:
+    {
+      "candidate_name": "...",
+      "candidate_email": "...",
+      "answers": [
+        {"question": 123, "text": "free text", "option_ids": [1,2]},
+        ...
+      ],
+      "transcript": "optional",
+      "source": "realtime|form|api"
+    }
+    Persists a Candidate, InterviewResponse (with answers_json snapshot), and
+    materializes Answer rows for manageability and reporting.
+    """
+    interview = get_object_or_404(Interview, pk=pk, is_active=True)
+
+    ser = SubmitResponseSerializer(data=request.data, context={"interview": interview})
+    if not ser.is_valid():
+        return Response({"success": False, "errors": ser.errors}, status=400)
+    data = ser.validated_data
+
+    candidate_name = (data.get("candidate_name") or "").strip()
+    candidate_email = (data.get("candidate_email") or "").strip().lower()
+
+    candidate, _ = Candidate.objects.get_or_create(
+        email=candidate_email,
+        defaults={"full_name": candidate_name}
+    )
+    if not candidate.full_name and candidate_name:
+        candidate.full_name = candidate_name
+        candidate.save(update_fields=["full_name"])
+
+    # Normalize/validate answers and enrich with labels
+    answers_enriched = []
+    for item in data.get("answers") or []:
+        try:
+            qid = int(item.get("question"))
+        except Exception:
+            continue
+        try:
+            q = Question.objects.get(pk=qid, interview=interview)
+        except Question.DoesNotExist:
+            continue
+
+        option_ids = list(map(int, item.get("option_ids") or []))
+        opt_labels = list(
+            QuestionOption.objects.filter(question=q, id__in=option_ids).values_list("option_text", flat=True)
+        )
+        answers_enriched.append({
+            "question": q.id,
+            "question_text": q.question_text,
+            "text": item.get("text") or "",
+            "option_ids": option_ids,
+            "option_labels": list(opt_labels),
+        })
+
+    response = InterviewResponse.objects.create(
+        interview=interview,
+        candidate=candidate,
+        candidate_name=candidate.full_name or candidate_name,
+        candidate_email=candidate.email,
+        answers_json={
+            "answers": answers_enriched,
+            "transcript": data.get("transcript") or "",
+            "source": data.get("source") or "api",
+        }
+    )
+
+    # Materialize relational answers for admin/reporting
+    for item in answers_enriched:
+        try:
+            q = Question.objects.get(pk=item["question"], interview=interview)
+        except Question.DoesNotExist:
+            continue
+        ans = Answer.objects.create(response=response, question=q, answer_text=item.get("text", ""))
+        if item.get("option_ids"):
+            valid_opts = QuestionOption.objects.filter(question=q, id__in=item["option_ids"])
+            if valid_opts:
+                ans.selected_options.add(*list(valid_opts))
+
+    return Response({"success": True, "response_id": response.id})
+
+
+# ---- Friendly error handlers (avoid raw error pages; sensible renders/JSON) ----
+def _is_ajax(request):
+    try:
+        return request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    except Exception:
+        return False
+
+
+def error_400(request, exception=None):
+    if _is_ajax(request):
+        return JsonResponse({'success': False, 'error': 'Bad request'}, status=400)
+    return render(request, '400.html', status=400)
+
+
+def error_403(request, exception=None):
+    if _is_ajax(request):
+        return JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
+    return render(request, '403.html', status=403)
+
+
+def error_404(request, exception=None):
+    if _is_ajax(request):
+        return JsonResponse({'success': False, 'error': 'Not found'}, status=404)
+    return render(request, '404.html', status=404)
+
+
+def error_500(request):
+    if _is_ajax(request):
+        return JsonResponse({'success': False, 'error': 'Server error'}, status=500)
+    return render(request, '500.html', status=500)

@@ -27,5 +27,11 @@ urlpatterns = [
     # Favicon (avoid 404 spam)
     path('favicon.ico', empty_favicon),
 ]
+
+# Friendly error handlers to avoid raw error status pages
+handler400 = 'interviews.views.error_400'
+handler403 = 'interviews.views.error_403'
+handler404 = 'interviews.views.error_404'
+handler500 = 'interviews.views.error_500'
 # Serve static files in development even if StaticFilesHandler isn’t active yet
 urlpatterns += staticfiles_urlpatterns()

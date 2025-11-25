@@ -18,7 +18,6 @@ ENV/
 
 # Django
 *.log
-db.sqlite3
 media/
 staticfiles/
 static_root/

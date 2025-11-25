@@ -32,22 +32,43 @@
             </div>
 
             <div class="space-y-4">
-                {% for answer in response.answers.all %}
-                <div class="border-l-4 border-purple-300 pl-4">
-                    <p class="font-medium text-gray-900 mb-2">{{ answer.question.question_text }}</p>
-                    {% if answer.answer_text %}
-                        <p class="text-gray-700">{{ answer.answer_text }}</p>
-                    {% elif answer.selected_options.all %}
-                        <ul class="list-disc list-inside text-gray-700">
-                            {% for option in answer.selected_options.all %}
-                            <li>{{ option.option_text }}</li>
-                            {% endfor %}
-                        </ul>
-                    {% else %}
-                        <p class="text-gray-400 italic">No answer provided</p>
-                    {% endif %}
-                </div>
-                {% endfor %}
+                {% if response.answers.all %}
+                    {% for answer in response.answers.all %}
+                    <div class="border-l-4 border-purple-300 pl-4">
+                        <p class="font-medium text-gray-900 mb-2">{{ answer.question.question_text }}</p>
+                        {% if answer.answer_text %}
+                            <p class="text-gray-700">{{ answer.answer_text }}</p>
+                        {% elif answer.selected_options.all %}
+                            <ul class="list-disc list-inside text-gray-700">
+                                {% for option in answer.selected_options.all %}
+                                <li>{{ option.option_text }}</li>
+                                {% endfor %}
+                            </ul>
+                        {% else %}
+                            <p class="text-gray-400 italic">No answer provided</p>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                {% elif response.answers_json.answers %}
+                    {% for item in response.answers_json.answers %}
+                    <div class="border-l-4 border-purple-300 pl-4">
+                        <p class="font-medium text-gray-900 mb-2">{{ item.question_text }}</p>
+                        {% if item.text %}
+                            <p class="text-gray-700">{{ item.text }}</p>
+                        {% elif item.option_labels %}
+                            <ul class="list-disc list-inside text-gray-700">
+                                {% for opt in item.option_labels %}
+                                <li>{{ opt }}</li>
+                                {% endfor %}
+                            </ul>
+                        {% else %}
+                            <p class="text-gray-400 italic">No answer provided</p>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-gray-400 italic">No answers recorded</p>
+                {% endif %}
             </div>
         </div>
         {% endfor %}

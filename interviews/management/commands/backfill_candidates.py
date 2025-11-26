@@ -1,7 +1,8 @@
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.db.models import Q
-from interviews.models import InterviewResponse, Candidate
+
+from interviews.models import Candidate, InterviewResponse
 
 
 class Command(BaseCommand):
@@ -23,10 +24,14 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         dry_run: bool = options["dry_run"]
         batch_size: int = options["batch_size"]
+        # Detect if legacy fields are present; if not, no-op gracefully
+        legacy_fields = {f.name for f in InterviewResponse._meta.get_fields() if hasattr(f, "name")}
+        if not {"candidate_email", "candidate_name"}.issubset(legacy_fields):
+            self.stdout.write(self.style.SUCCESS("Legacy fields not present; nothing to backfill."))
+            return
 
         qs = (
-            InterviewResponse.objects
-            .filter(candidate__isnull=True)
+            InterviewResponse.objects.filter(candidate__isnull=True)
             .filter(~Q(candidate_email__isnull=True), ~Q(candidate_email__exact=""))
             .order_by("id")
         )
@@ -45,7 +50,6 @@ class Command(BaseCommand):
         updated_candidate_names = 0
         skipped = 0
 
-        batch = []
         to_update = []
 
         def flush_batch():
@@ -62,8 +66,8 @@ class Command(BaseCommand):
             to_update.clear()
 
         for resp in qs.iterator(chunk_size=batch_size):
-            email = (resp.candidate_email or "").strip().lower()
-            name = (resp.candidate_name or "").strip()
+            email = (getattr(resp, "candidate_email", "") or "").strip().lower()
+            name = (getattr(resp, "candidate_name", "") or "").strip()
 
             if not email:
                 skipped += 1
@@ -95,7 +99,9 @@ class Command(BaseCommand):
 
         # Summary
         self.stdout.write("")
-        self.stdout.write(self.style.SUCCESS("Backfill complete" + (" (DRY RUN)" if dry_run else "")))
+        self.stdout.write(
+            self.style.SUCCESS("Backfill complete" + (" (DRY RUN)" if dry_run else ""))
+        )
         self.stdout.write(f"  Candidate rows created: {created_candidates}")
         self.stdout.write(f"  Candidate names updated: {updated_candidate_names}")
         self.stdout.write(f"  InterviewResponses linked: {linked if not dry_run else len(qs)}")

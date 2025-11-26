@@ -22,8 +22,8 @@
         <h3 class="text-lg font-semibold text-gray-900 mb-3">Q{{ forloop.counter }}. {{ q.question_text }}</h3>
         {% if q.question_type == 'multiple_choice' %}
           <ul class="list-disc list-inside text-gray-800">
-            {% for opt in q.options.all %}
-            <li>{{ opt.option_text }}</li>
+            {% for opt in q.options %}
+            <li>{{ opt }}</li>
             {% empty %}
             <li class="text-gray-500">No options added</li>
             {% endfor %}

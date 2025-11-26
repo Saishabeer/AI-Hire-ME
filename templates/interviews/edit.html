@@ -6,7 +6,7 @@
 <div class="max-w-4xl mx-auto">
     <!-- Hidden CSRF Token for AJAX -->
     {% csrf_token %}
-    
+
     <!-- Header -->
     <div class="bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg shadow-lg p-6 mb-6">
         <h1 class="text-3xl font-bold mb-2">
@@ -74,8 +74,8 @@
                 {% if question.section_id == s.id %}
                 <div class="bg-white rounded-lg shadow-lg p-6 question-card" data-question-id="{{ question.id }}">
                     <div class="flex justify-between items-start mb-4">
-                        <input 
-                            type="text" 
+                        <input
+                            type="text"
                             value="{{ question.question_text }}"
                             class="flex-1 text-lg font-semibold border-0 border-b-2 border-transparent hover:border-gray-300 focus:border-purple-500 focus:outline-none question-text bg-white text-gray-900 placeholder-gray-400"
                             placeholder="Question text"
@@ -103,12 +103,12 @@
                     </div>
                     {% if question.question_type == 'multiple_choice' %}
                     <div class="options-container space-y-2 ml-4">
-                        {% for option in question.options.all %}
-                        <div class="flex items-center space-x-2 option-item" data-option-id="{{ option.id }}">
+                        {% for option in question.options %}
+                        <div class="flex items-center space-x-2 option-item" data-option-index="{{ forloop.counter0 }}">
                             <i class="fas fa-circle text-gray-400 text-xs"></i>
-                            <input 
-                                type="text" 
-                                value="{{ option.option_text }}"
+                            <input
+                                type="text"
+                                value="{{ option }}"
                                 class="flex-1 border-0 border-b border-gray-300 focus:border-purple-500 focus:outline-none option-text bg-white text-gray-900 placeholder-gray-400"
                                 placeholder="Option text"
                             >
@@ -227,6 +227,14 @@ document.addEventListener('DOMContentLoaded', function () {
         return c;
     }
 
+    // Keep option_index aligned with server list after any add/delete
+    function reindexOptions(card) {
+        const items = Array.from(card.querySelectorAll('.options-container .option-item'));
+        items.forEach((row, i) => {
+            row.dataset.optionIndex = String(i);
+        });
+    }
+
     function createQuestionCard(q) {
         const wrapper = document.createElement('div');
         wrapper.className = 'bg-white rounded-lg shadow-lg p-6 question-card';
@@ -253,13 +261,13 @@ document.addEventListener('DOMContentLoaded', function () {
         if (q.type === 'multiple_choice') {
             const oc = createOptionsContainer();
             if (q.options && q.options.length) {
-                q.options.forEach(o => {
+                q.options.forEach((o, i) => {
                     const row = document.createElement('div');
                     row.className = 'flex items-center space-x-2 option-item';
-                    row.dataset.optionId = o.id || '';
+                    row.dataset.optionIndex = String(i);
                     row.innerHTML = `
                         <i class="fas fa-circle text-gray-400 text-xs"></i>
-                        <input type="text" value="${escapeHtml(o.text)}" class="flex-1 border-0 border-b border-gray-300 focus:border-purple-500 focus:outline-none option-text bg-white text-gray-900 placeholder-gray-400" placeholder="Option text">
+                        <input type="text" value="${escapeHtml(typeof o === 'string' ? o : (o.text || ''))}" class="flex-1 border-0 border-b border-gray-300 focus:border-purple-500 focus:outline-none option-text bg-white text-gray-900 placeholder-gray-400" placeholder="Option text">
                         <button class="text-red-500 hover:text-red-700 delete-option"><i class="fas fa-times"></i></button>
                     `;
                     oc.insertBefore(row, oc.firstChild);
@@ -352,8 +360,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (target.classList.contains('option-text')) {
             const item = target.closest('.option-item');
-            const optionId = item.dataset.optionId;
-            await postJSON({ action: 'update_option', option_id: optionId, option_text: target.value });
+            const optionIndex = parseInt(item.dataset.optionIndex || '0', 10) || 0;
+            await postJSON({
+                action: 'update_option',
+                question_id: card.dataset.questionId,
+                option_index: optionIndex,
+                option_text: target.value
+            });
         }
 
         if (target.classList.contains('question-section')) {
@@ -436,7 +449,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             return;
         }
-        
+
         if (btn.classList.contains('delete-question')) {
             if (!confirm('Delete this question?')) return;
             const card = btn.closest('.question-card');
@@ -445,7 +458,7 @@ document.addEventListener('DOMContentLoaded', function () {
             if (r.ok) card.remove();
             return;
         }
-        
+
         if (btn.classList.contains('add-option')) {
             e.preventDefault();
             const card = btn.closest('.question-card');
@@ -456,23 +469,32 @@ document.addEventListener('DOMContentLoaded', function () {
                 const oc = card.querySelector('.options-container') || card.appendChild(createOptionsContainer());
                 const el = document.createElement('div');
                 el.className = 'flex items-center space-x-2 option-item';
-                el.dataset.optionId = js.option_id;
+                el.dataset.optionIndex = String(js.option_index);
                 el.innerHTML = `
                     <i class="fas fa-circle text-gray-400 text-xs"></i>
                     <input type="text" value="Option" class="flex-1 border-0 border-b border-gray-300 focus:border-purple-500 focus:outline-none option-text bg-white text-gray-900 placeholder-gray-400" placeholder="Option text">
                     <button class="text-red-500 hover:text-red-700 delete-option"><i class="fas fa-times"></i></button>
                 `;
                 oc.insertBefore(el, oc.querySelector('.add-option'));
+                reindexOptions(card);
             }
             return;
         }
-        
+
         if (btn.classList.contains('delete-option')) {
             e.preventDefault();
             const item = btn.closest('.option-item');
-            const optionId = item.dataset.optionId;
-            const r = await postJSON({ action: 'delete_option', option_id: optionId });
-            if (r.ok) item.remove();
+            const card = btn.closest('.question-card');
+            const optionIndex = parseInt(item.dataset.optionIndex || '0', 10) || 0;
+            const r = await postJSON({
+                action: 'delete_option',
+                question_id: card.dataset.questionId,
+                option_index: optionIndex
+            });
+            if (r.ok) {
+                item.remove();
+                reindexOptions(card);
+            }
             return;
         }
     });

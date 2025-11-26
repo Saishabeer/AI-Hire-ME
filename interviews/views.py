@@ -1,30 +1,34 @@
-from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib.auth.decorators import login_required
-from django.contrib import messages
-from django.http import JsonResponse
-from django.views.decorators.http import require_http_methods
-from .models import Interview, Section, Question, QuestionOption, InterviewResponse, Answer, Candidate
-from .serializers import SubmitResponseSerializer
-from rest_framework.decorators import api_view, permission_classes, authentication_classes
-from rest_framework.permissions import AllowAny
-from rest_framework.response import Response
-from django.urls import reverse
 import json
+import os
+import urllib.error
+import urllib.parse
+import urllib.request
+
+from django.conf import settings
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 
 # Added imports for realtime session minting
 from django.views.decorators.csrf import csrf_exempt
-from django.conf import settings
-import os
-import urllib.request
-import urllib.error
-import urllib.parse
+from django.views.decorators.http import require_http_methods
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+
+from .models import Answer, Candidate, Interview, InterviewResponse, Question, Section
+from .serializers import SubmitResponseSerializer
 
 
 @require_http_methods(["GET"])
 def interview_list(request):
     """List all interviews"""
     interviews = Interview.objects.filter(is_active=True)
-    user_interviews = Interview.objects.filter(created_by=request.user) if request.user.is_authenticated else None
+    user_interviews = (
+        Interview.objects.filter(created_by=request.user) if request.user.is_authenticated else None
+    )
     context = {'interviews': interviews, 'user_interviews': user_interviews}
     return render(request, 'interviews/list.html', context)
 
@@ -41,9 +45,7 @@ def interview_create(request):
             return redirect('interviews:create')
 
         interview = Interview.objects.create(
-            title=title.strip(),
-            description=description,
-            created_by=request.user
+            title=title.strip(), description=description, created_by=request.user
         )
         messages.success(request, 'Interview created successfully!')
         return redirect('interviews:edit', pk=interview.pk)
@@ -89,7 +91,6 @@ def interview_edit(request, pk):
                         sec = None
 
                 question = Question.objects.create(
-                    interview=interview,
                     section=sec,
                     question_text=data.get('question_text', 'Untitled Question'),
                     question_type=data.get('question_type', 'text'),
@@ -99,7 +100,9 @@ def interview_edit(request, pk):
                 return JsonResponse({'success': True, 'question_id': question.id})
 
             elif action == 'update_question':
-                question = get_object_or_404(Question, pk=data.get('question_id'), interview=interview)
+                question = get_object_or_404(
+                    Question, pk=data.get('question_id'), section__interview=interview
+                )
                 question.question_text = data.get('question_text', question.question_text)
                 question.question_type = data.get('question_type', question.question_type)
                 question.is_required = bool(data.get('is_required', question.is_required))
@@ -107,39 +110,60 @@ def interview_edit(request, pk):
                 return JsonResponse({'success': True})
 
             elif action == 'delete_question':
-                question = get_object_or_404(Question, pk=data.get('question_id'), interview=interview)
+                question = get_object_or_404(
+                    Question, pk=data.get('question_id'), section__interview=interview
+                )
                 question.delete()
                 return JsonResponse({'success': True})
 
             elif action == 'add_option':
-                question = get_object_or_404(Question, pk=data.get('question_id'), interview=interview)
-                option = QuestionOption.objects.create(
-                    question=question,
-                    option_text=data.get('option_text', 'Option'),
-                    order=question.options.count(),
+                question = get_object_or_404(
+                    Question, pk=data.get('question_id'), section__interview=interview
                 )
-                return JsonResponse({'success': True, 'option_id': option.id})
+                opts = list(question.options or [])
+                text = data.get('option_text', 'Option')
+                opts.append(text)
+                question.options = opts
+                question.save(update_fields=['options'])
+                return JsonResponse({'success': True, 'option_index': len(opts) - 1})
 
             elif action == 'update_option':
-                # Update option text (ensure option belongs to this interview)
-                option = get_object_or_404(
-                    QuestionOption,
-                    pk=data.get('option_id'),
-                    question__interview=interview
+                # Update option text by index on the Question.options list
+                question = get_object_or_404(
+                    Question, pk=data.get('question_id'), section__interview=interview
                 )
-                option.option_text = data.get('option_text', option.option_text)
-                option.save()
-                return JsonResponse({'success': True})
-            
+                try:
+                    idx = int(data.get('option_index'))
+                except Exception:
+                    return JsonResponse(
+                        {'success': False, 'error': 'Invalid option index'}, status=400
+                    )
+                opts = list(question.options or [])
+                if 0 <= idx < len(opts):
+                    opts[idx] = data.get('option_text', opts[idx])
+                    question.options = opts
+                    question.save(update_fields=['options'])
+                    return JsonResponse({'success': True})
+                return JsonResponse({'success': False, 'error': 'Index out of range'}, status=400)
+
             elif action == 'delete_option':
-                # Hardened: ensure the option belongs to the current interview
-                option = get_object_or_404(
-                    QuestionOption,
-                    pk=data.get('option_id'),
-                    question__interview=interview
+                # Remove option by index from question.options list
+                question = get_object_or_404(
+                    Question, pk=data.get('question_id'), section__interview=interview
                 )
-                option.delete()
-                return JsonResponse({'success': True})
+                try:
+                    idx = int(data.get('option_index'))
+                except Exception:
+                    return JsonResponse(
+                        {'success': False, 'error': 'Invalid option index'}, status=400
+                    )
+                opts = list(question.options or [])
+                if 0 <= idx < len(opts):
+                    del opts[idx]
+                    question.options = opts
+                    question.save(update_fields=['options'])
+                    return JsonResponse({'success': True})
+                return JsonResponse({'success': False, 'error': 'Index out of range'}, status=400)
 
             elif action == 'add_section':
                 title = (data.get('title') or 'Untitled Section').strip()
@@ -148,7 +172,7 @@ def interview_edit(request, pk):
                     interview=interview,
                     title=title or 'Untitled Section',
                     description=description,
-                    order=interview.sections.count()
+                    order=interview.sections.count(),
                 )
                 return JsonResponse({'success': True, 'section_id': section.id})
 
@@ -171,19 +195,27 @@ def interview_edit(request, pk):
                     fallback = others.first()
                 else:
                     # Create a new section if none remain
-                    fallback = Section.objects.create(interview=interview, title="Section 1", order=0)
-                Question.objects.filter(interview=interview, section=section).update(section=fallback)
+                    fallback = Section.objects.create(
+                        interview=interview, title="Section 1", order=0
+                    )
+                Question.objects.filter(section=section).update(section=fallback)
                 section.delete()
                 return JsonResponse({'success': True, 'fallback_section_id': fallback.id})
 
             elif action == 'move_question':
-                question = get_object_or_404(Question, pk=data.get('question_id'), interview=interview)
+                question = get_object_or_404(
+                    Question, pk=data.get('question_id'), section__interview=interview
+                )
                 section_id = data.get('section_id')
                 if section_id in (None, '', 'null'):
                     # Keep current section or fallback to the first available section (no unsectioned state)
-                    fallback = question.section or interview.sections.order_by("order", "id").first()
+                    fallback = (
+                        question.section or interview.sections.order_by("order", "id").first()
+                    )
                     if fallback is None:
-                        fallback = Section.objects.create(interview=interview, title="Section 1", order=0)
+                        fallback = Section.objects.create(
+                            interview=interview, title="Section 1", order=0
+                        )
                     question.section = fallback
                 else:
                     section = get_object_or_404(Section, pk=section_id, interview=interview)
@@ -195,20 +227,16 @@ def interview_edit(request, pk):
 
         messages.success(request, 'Interview updated successfully!')
         return redirect('interviews:edit', pk=pk)
-    
-    # Ensure at least one section exists; if none, create a default and attach unsectioned questions
+
+    # Ensure at least one section exists; if none, create a default
     if interview.sections.count() == 0:
         Section.objects.create(interview=interview, title="Section 1", order=0)
     first_sec = interview.sections.order_by("order", "id").first()
-    if first_sec:
-        # Attach any legacy unsectioned questions to the first section to avoid a 'General' bucket
-        Interview.objects.filter(pk=interview.pk)  # no-op to ensure interview stays referenced
-        Question.objects.filter(interview=interview, section__isnull=True).update(section=first_sec)
 
     context = {
         'interview': interview,
         'sections': interview.sections.all(),
-        'questions': interview.questions.select_related('section').all()
+        'questions': interview.questions.select_related('section').all(),
     }
     return render(request, 'interviews/edit.html', context)
 
@@ -225,7 +253,9 @@ def interview_detail(request, pk):
 def interview_preview(request, pk):
     """Preview the interview form"""
     interview = get_object_or_404(Interview, pk=pk, created_by=request.user)
-    return render(request, 'interviews/preview.html', {'interview': interview, 'preview_mode': True})
+    return render(
+        request, 'interviews/preview.html', {'interview': interview, 'preview_mode': True}
+    )
 
 
 @login_required
@@ -249,7 +279,7 @@ def interview_take(request, pk):
 
     if request.method == 'POST':
         candidate_name = (request.POST.get('candidate_name') or '').strip()
-        candidate_email = (request.POST.get('candidate_email') or '').strip()
+        candidate_email = (request.POST.get('candidate_email') or '').strip().lower()
 
         if not candidate_name or not candidate_email:
             messages.error(request, 'Name and email are required')
@@ -258,8 +288,7 @@ def interview_take(request, pk):
 
         # Normalize candidate entity
         candidate, _ = Candidate.objects.get_or_create(
-            email=candidate_email,
-            defaults={'full_name': candidate_name}
+            email=candidate_email, defaults={'full_name': candidate_name}
         )
         # If we discovered name now and profile lacks it, update
         if not candidate.full_name and candidate_name:
@@ -270,8 +299,6 @@ def interview_take(request, pk):
         response = InterviewResponse.objects.create(
             interview=interview,
             candidate=candidate,
-            candidate_name=candidate.full_name or candidate_name,
-            candidate_email=candidate.email
         )
 
         # Save answers (relational) and build compact JSON snapshot
@@ -283,44 +310,45 @@ def interview_take(request, pk):
                 text_val = request.POST.get(f'question_{question.id}', '') or ''
                 answer.answer_text = text_val
                 answer.save()
-                answers_snapshot.append({
-                    'question': question.id,
-                    'question_text': question.question_text,
-                    'text': text_val,
-                    'option_ids': [],
-                    'option_labels': [],
-                })
+                answers_snapshot.append(
+                    {
+                        'question': question.id,
+                        'question_text': question.question_text,
+                        'text': text_val,
+                        'option_values': [],
+                    }
+                )
 
             elif question.question_type == 'multiple_choice':
-                option_id = request.POST.get(f'question_{question.id}')
-                opt_ids, opt_labels = [], []
-                if option_id:
-                    try:
-                        opt_id_int = int(option_id)
-                        option = QuestionOption.objects.get(pk=opt_id_int, question=question)
-                        answer.selected_options.add(option)
-                        opt_ids = [option.id]
-                        opt_labels = [option.option_text]
-                    except (QuestionOption.DoesNotExist, ValueError, TypeError):
-                        # Ignore invalid option values
-                        pass
-                answers_snapshot.append({
-                    'question': question.id,
-                    'question_text': question.question_text,
-                    'text': '',
-                    'option_ids': opt_ids,
-                    'option_labels': opt_labels,
-                })
+                option_value = request.POST.get(f'question_{question.id}')
+                opt_values = []
+                if option_value and option_value in (question.options or []):
+                    answer.selected_options = [option_value]
+                    answer.save(update_fields=['selected_options'])
+                    opt_values = [option_value]
+                answers_snapshot.append(
+                    {
+                        'question': question.id,
+                        'question_text': question.question_text,
+                        'text': '',
+                        'option_values': opt_values,
+                    }
+                )
 
         # Attach JSON snapshot for easy export/reporting
         response.answers_json = {'answers': answers_snapshot, 'source': 'form'}
         response.save(update_fields=['answers_json'])
 
         messages.success(request, 'Interview submitted successfully!')
-        # Redirect owner (and staff/admin) to responses; others to public detail page
-        if request.user.is_authenticated and (request.user == interview.created_by or request.user.is_staff or request.user.is_superuser):
+        # Redirect owner (and staff/admin) to responses; others to public receipt page
+        if request.user.is_authenticated and (
+            request.user == interview.created_by
+            or request.user.is_staff
+            or request.user.is_superuser
+        ):
             return redirect('interviews:responses', pk=pk)
-        return redirect('interviews:detail', pk=pk)
+        # Candidate: show their receipt page with the answers that were just submitted
+        return redirect('interviews:response_detail', rid=response.id)
 
     return render(request, 'interviews/take.html', {'interview': interview})
 
@@ -330,11 +358,29 @@ def interview_take(request, pk):
 def interview_responses(request, pk):
     """View responses for an interview (owner-only; staff/admin allowed). Non-owners are redirected to detail."""
     interview = get_object_or_404(Interview, pk=pk)
-    if not request.user.is_authenticated or (request.user != interview.created_by and not request.user.is_staff and not request.user.is_superuser):
+    if not request.user.is_authenticated or (
+        request.user != interview.created_by
+        and not request.user.is_staff
+        and not request.user.is_superuser
+    ):
         messages.error(request, "You do not have permission to view responses for this interview.")
         return redirect('interviews:detail', pk=pk)
     responses = interview.responses.all()
-    return render(request, 'interviews/responses.html', {'interview': interview, 'responses': responses})
+    return render(
+        request, 'interviews/responses.html', {'interview': interview, 'responses': responses}
+    )
+
+
+@require_http_methods(["GET"])
+def interview_response_view(request, rid):
+    """
+    Public receipt page showing a single candidate's submission.
+    """
+    resp = get_object_or_404(
+        InterviewResponse.objects.select_related("interview", "candidate").prefetch_related("answers__question"),
+        pk=rid,
+    )
+    return render(request, 'interviews/response_detail.html', {'response': resp})
 
 
 # === Realtime AI Interview: Mint ephemeral OpenAI Realtime session token ===
@@ -348,7 +394,9 @@ def realtime_session(request):
     """
     api_key = getattr(settings, "OPENAI_API_KEY", os.getenv("OPENAI_API_KEY"))
     if not api_key:
-        return JsonResponse({"error": "OPENAI_API_KEY is not configured on the server."}, status=500)
+        return JsonResponse(
+            {"error": "OPENAI_API_KEY is not configured on the server."}, status=500
+        )
 
     # Try to read interview_id from request to build strict instructions
     interview = None
@@ -365,7 +413,7 @@ def realtime_session(request):
         # If body can't be parsed, continue with generic behavior
         interview = None
 
-    model = "gpt-4o-realtime-preview-2024-12-17"
+    model = getattr(settings, "OPENAI_REALTIME_MODEL", os.getenv("OPENAI_REALTIME_MODEL", "gpt-4o-realtime-preview-2024-12-17"))
 
     # Build strict instructions when an interview is provided
     if interview:
@@ -380,7 +428,9 @@ def realtime_session(request):
             for s in sections:
                 try:
                     qtexts = list(
-                        s.questions.all().order_by("order", "id").values_list("question_text", flat=True)
+                        s.questions.all()
+                        .order_by("order", "id")
+                        .values_list("question_text", flat=True)
                     )
                 except Exception:
                     qtexts = []
@@ -395,33 +445,33 @@ def realtime_session(request):
         questions_block = "\n".join(section_lines) if section_lines else "(No questions configured)"
 
         instructions = (
-            f"You are interviewing a candidate for '{interview.title}'. "
-            "Ask ONLY the following questions in EXACTLY this order, one section at a time. "
-            "Finish all questions in a section before starting the next. "
-            "Do NOT add, invent, or substitute any other questions. "
-            "After each answer, briefly acknowledge and move on to the next question. "
-            "If the candidate has already answered a question implicitly, briefly confirm and proceed. "
-            "If interrupted, stop speaking and listen (barge-in). "
-            "Conclude politely after the final question.\n\n"
+            f"You are conducting a strictly scripted interview for '{interview.title}'. "
+            "Speak ONLY the exact question text provided by HR, in the configured order. "
+            "Do not add greetings, fillers, acknowledgements, confirmations, summaries, or follow‑ups. "
+            "Never invent, rephrase, or substitute any questions. "
+            "Speak exactly one question per turn and nothing else. "
+            "If no next question is provided, remain silent. "
+            "Conclude only after the final question has been asked.\n\n"
             "Questions (by section):\n"
             f"{questions_block}"
         )
     else:
         # Generic fallback (less strict if no interview provided)
         instructions = (
-            "You are a professional interviewer. Start immediately by greeting the candidate and asking the first question. "
-            "Continue asking one question at a time automatically. If the candidate interrupts, stop speaking and listen (barge-in). "
+            "You are a professional interviewer. Start immediately by asking the first question exactly as written, with no greeting, no preamble, and no paraphrasing. "
+            "Ask ONE question per turn only; do not chain multiple questions in a single response. If the candidate interrupts, stop speaking and listen (barge-in). "
             "Keep responses concise and conversational. Conclude politely when the interview is complete."
         )
 
+    voice = getattr(settings, "OPENAI_REALTIME_VOICE", os.getenv("OPENAI_TTS_VOICE", "alloy"))
+    transcribe_model = getattr(settings, "OPENAI_TRANSCRIBE_MODEL", os.getenv("OPENAI_TRANSCRIBE_MODEL", "whisper-1"))
+
     payload = {
         "model": model,
-        "voice": "verse",
+        "voice": voice,
         "modalities": ["text", "audio"],
         # Enable server-side speech-to-text so we can show user's transcript in the UI
-        "input_audio_transcription": {
-            "model": "whisper-1"
-        },
+        "input_audio_transcription": {"model": transcribe_model},
         "turn_detection": {
             "type": "server_vad",
             "threshold": 0.5,
@@ -446,14 +496,20 @@ def realtime_session(request):
             data = json.loads(body)
             # Return only what's needed by the browser
             return JsonResponse(
-                {"client_secret": data.get("client_secret"), "id": data.get("id"), "model": data.get("model")}
+                {
+                    "client_secret": data.get("client_secret"),
+                    "id": data.get("id"),
+                    "model": data.get("model"),
+                }
             )
     except urllib.error.HTTPError as e:
         try:
             err_body = e.read().decode("utf-8")
         except Exception:
             err_body = ""
-        return JsonResponse({"error": "Failed to create session", "details": err_body}, status=e.code)
+        return JsonResponse(
+            {"error": "Failed to create session", "details": err_body}, status=e.code
+        )
     except Exception as e:
         return JsonResponse({"error": "Internal server error", "details": str(e)}, status=500)
 
@@ -486,8 +542,9 @@ def ai_interview_start(request, pk):
             'candidate_name': (request.GET.get('name') or '').strip(),
             'candidate_email': (request.GET.get('email') or '').strip(),
             'submit_url': reverse('interviews:submit_json', args=[pk]),
-        }
+        },
     )
+
 
 # === JSON submission API (used by voice/JS and external clients) ===
 @api_view(["POST"])
@@ -500,12 +557,15 @@ def interview_submit_json(request, pk):
       "candidate_name": "...",
       "candidate_email": "...",
       "answers": [
-        {"question": 123, "text": "free text", "option_ids": [1,2]},
+        {"question": 123, "text": "free text", "option_values": ["value1", "value2"]},
         ...
       ],
       "transcript": "optional",
       "source": "realtime|form|api"
     }
+    Notes:
+    - For multiple_choice questions, each entry in option_values must match one of the question's configured options (by value, not id).
+    - Text answers are always accepted; option_values is optional.
     Persists a Candidate, InterviewResponse (with answers_json snapshot), and
     materializes Answer rows for manageability and reporting.
     """
@@ -520,8 +580,7 @@ def interview_submit_json(request, pk):
     candidate_email = (data.get("candidate_email") or "").strip().lower()
 
     candidate, _ = Candidate.objects.get_or_create(
-        email=candidate_email,
-        defaults={"full_name": candidate_name}
+        email=candidate_email, defaults={"full_name": candidate_name}
     )
     if not candidate.full_name and candidate_name:
         candidate.full_name = candidate_name
@@ -535,47 +594,45 @@ def interview_submit_json(request, pk):
         except Exception:
             continue
         try:
-            q = Question.objects.get(pk=qid, interview=interview)
+            q = Question.objects.get(pk=qid, section__interview=interview)
         except Question.DoesNotExist:
             continue
 
-        option_ids = list(map(int, item.get("option_ids") or []))
-        opt_labels = list(
-            QuestionOption.objects.filter(question=q, id__in=option_ids).values_list("option_text", flat=True)
+        vals = list(map(str, item.get("option_values") or []))
+        allowed = set(q.options or [])
+        vals = [v for v in vals if v in allowed]
+        answers_enriched.append(
+            {
+                "question": q.id,
+                "question_text": q.question_text,
+                "text": item.get("text") or "",
+                "option_values": vals,
+            }
         )
-        answers_enriched.append({
-            "question": q.id,
-            "question_text": q.question_text,
-            "text": item.get("text") or "",
-            "option_ids": option_ids,
-            "option_labels": list(opt_labels),
-        })
 
     response = InterviewResponse.objects.create(
         interview=interview,
         candidate=candidate,
-        candidate_name=candidate.full_name or candidate_name,
-        candidate_email=candidate.email,
         answers_json={
             "answers": answers_enriched,
             "transcript": data.get("transcript") or "",
             "source": data.get("source") or "api",
-        }
+        },
     )
 
     # Materialize relational answers for admin/reporting
     for item in answers_enriched:
         try:
-            q = Question.objects.get(pk=item["question"], interview=interview)
+            q = Question.objects.get(pk=item["question"], section__interview=interview)
         except Question.DoesNotExist:
             continue
         ans = Answer.objects.create(response=response, question=q, answer_text=item.get("text", ""))
-        if item.get("option_ids"):
-            valid_opts = QuestionOption.objects.filter(question=q, id__in=item["option_ids"])
-            if valid_opts:
-                ans.selected_options.add(*list(valid_opts))
+        if item.get("option_values"):
+            ans.selected_options = list(item["option_values"])
+            ans.save(update_fields=["selected_options"])
 
-    return Response({"success": True, "response_id": response.id})
+    receipt_url = reverse('interviews:response_detail', args=[response.id])
+    return Response({"success": True, "response_id": response.id, "receipt_url": receipt_url})
 
 
 # ---- Friendly error handlers (avoid raw error pages; sensible renders/JSON) ----

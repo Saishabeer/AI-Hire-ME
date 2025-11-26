@@ -2,8 +2,8 @@
 Django settings for AI Interviewer project.
 """
 
-from pathlib import Path
 import os
+from pathlib import Path
 
 """Project settings (decouple removed; env via os.getenv with optional dotenv)."""
 
@@ -13,6 +13,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Optionally load variables from a .env file if python-dotenv is available
 try:
     from dotenv import load_dotenv  # type: ignore
+
     load_dotenv(dotenv_path=BASE_DIR / ".env")
 except Exception:
     pass
@@ -43,6 +44,7 @@ OPENAI_REALTIME_VOICE = os.getenv('OPENAI_REALTIME_VOICE', os.getenv('OPENAI_TTS
 # Keep TTS voice for other modules if they reference it
 OPENAI_TTS_VOICE = os.getenv('OPENAI_TTS_VOICE', OPENAI_REALTIME_VOICE)
 
+
 # SECURITY WARNING: don't run with debug turned on in production!
 def _get_bool(name: str, default: bool) -> bool:
     v = os.getenv(name)
@@ -50,13 +52,16 @@ def _get_bool(name: str, default: bool) -> bool:
         return default
     return str(v).strip().lower() in {"1", "true", "yes", "on"}
 
+
 DEBUG = _get_bool('DEBUG', True)
+
 
 def _get_list(name: str, default: list[str]) -> list[str]:
     v = os.getenv(name)
     if not v:
         return default
     return [s.strip() for s in str(v).split(',') if s.strip()]
+
 
 ALLOWED_HOSTS = _get_list('ALLOWED_HOSTS', ['localhost', '127.0.0.1'])
 
@@ -69,11 +74,9 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    
     # Third party apps
     'rest_framework',
     'corsheaders',
-    
     # Local apps
     'interviews',
     'accounts',
@@ -174,7 +177,7 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticatedOrReadOnly',
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 10
+    'PAGE_SIZE': 10,
 }
 
 # Ensure Django redirects use root-level auth paths

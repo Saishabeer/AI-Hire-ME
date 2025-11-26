@@ -23,8 +23,8 @@
         <div class="card">
             <div class="flex justify-between items-start mb-4">
                 <div>
-                    <h3 class="text-xl font-bold text-gray-900">{{ response.candidate_name }}</h3>
-                    <p class="text-gray-600">{{ response.candidate_email }}</p>
+                    <h3 class="text-xl font-bold text-gray-900">{{ response.candidate.full_name|default:"Unknown" }}</h3>
+                    <p class="text-gray-600">{{ response.candidate.email|default:"" }}</p>
                 </div>
                 <span class="text-sm text-gray-500">
                     <i class="fas fa-clock mr-1"></i>{{ response.submitted_at|date:"M d, Y H:i" }}
@@ -38,10 +38,10 @@
                         <p class="font-medium text-gray-900 mb-2">{{ answer.question.question_text }}</p>
                         {% if answer.answer_text %}
                             <p class="text-gray-700">{{ answer.answer_text }}</p>
-                        {% elif answer.selected_options.all %}
+                        {% elif answer.selected_options %}
                             <ul class="list-disc list-inside text-gray-700">
-                                {% for option in answer.selected_options.all %}
-                                <li>{{ option.option_text }}</li>
+                                {% for opt in answer.selected_options %}
+                                <li>{{ opt }}</li>
                                 {% endfor %}
                             </ul>
                         {% else %}
@@ -55,9 +55,9 @@
                         <p class="font-medium text-gray-900 mb-2">{{ item.question_text }}</p>
                         {% if item.text %}
                             <p class="text-gray-700">{{ item.text }}</p>
-                        {% elif item.option_labels %}
+                        {% elif item.option_values %}
                             <ul class="list-disc list-inside text-gray-700">
-                                {% for opt in item.option_labels %}
+                                {% for opt in item.option_values %}
                                 <li>{{ opt }}</li>
                                 {% endfor %}
                             </ul>

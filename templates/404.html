@@ -1,0 +1,11 @@
+{% extends 'base.html' %}
+{% block title %}Page not found (404){% endblock %}
+{% block content %}
+<div class="container page max-w-2xl mx-auto">
+  <div class="card">
+    <h1 class="text-2xl font-bold mb-2"><i class="fas fa-search mr-2"></i>Page not found</h1>
+    <p class="text-gray-400">The page you’re looking for doesn’t exist or may have moved.</p>
+    <a href="{% url 'home' %}" class="btn btn-outline mt-4"><i class="fas fa-home mr-2"></i>Home</a>
+  </div>
+</div>
+{% endblock %}

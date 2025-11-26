@@ -1,4 +1,5 @@
 from django.urls import path
+
 from . import views
 
 app_name = 'interviews'
@@ -13,11 +14,15 @@ urlpatterns = [
     path('<int:pk>/take/', views.interview_take, name='take'),
     path('<int:pk>/submit/', views.interview_submit_json, name='submit_json'),
     path('<int:pk>/responses/', views.interview_responses, name='responses'),
-    
     # AI Conversational Interview (info + live) consolidated into views.py
     path('<int:pk>/ai-interview/', views.ai_interview_info, name='ai_interview'),
     path('<int:pk>/ai-interview/live/', views.ai_interview_start, name='ai_interview_live'),
-
     # Realtime: ephemeral token minting
-    path('ai-interview/realtime/session/', views.realtime_session, name='ai_interview_realtime_session'),
+    path(
+        'ai-interview/realtime/session/',
+        views.realtime_session,
+        name='ai_interview_realtime_session',
+    ),
+    # Public receipt page for a single response
+    path('responses/<int:rid>/', views.interview_response_view, name='response_detail'),
 ]

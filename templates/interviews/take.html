@@ -70,15 +70,15 @@
 
           {% elif q.question_type == 'multiple_choice' %}
             <div class="space-y-2">
-              {% for opt in q.options.all %}
+              {% for opt in q.options %}
               <label class="inline-flex items-center space-x-2">
                 <input
                   type="radio"
                   name="question_{{ q.id }}"
-                  value="{{ opt.id }}"
+                  value="{{ opt }}"
                   {% if q.is_required and forloop.first %}required{% endif %}
                 />
-                <span>{{ opt.option_text }}</span>
+                <span>{{ opt }}</span>
               </label><br/>
               {% empty %}
                 <p class="text-sm text-gray-500">No options configured.</p>

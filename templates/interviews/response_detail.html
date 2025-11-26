@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+
+{% block title %}Your Interview Submission — {{ response.interview.title }}{% endblock %}
+
+{% block content %}
+<div class="container page max-w-3xl mx-auto">
+  <div class="card">
+    <h1 class="text-2xl font-bold mb-2">
+      <i class="fas fa-check-circle text-green-600 mr-2"></i>Submission received
+    </h1>
+    <p class="text-gray-700">
+      Thank you{% if response.candidate.full_name %}, {{ response.candidate.full_name }}{% endif %}. Your responses for
+      <strong>{{ response.interview.title }}</strong> were submitted on
+      <strong>{{ response.submitted_at|date:"M d, Y H:i" }}</strong>.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2 class="text-xl font-semibold mb-3">Your answers</h2>
+
+    {% for answer in response.answers.all %}
+      <div class="border-l-4 border-purple-300 pl-4 mb-4">
+        <p class="font-medium text-gray-900 mb-2">{{ answer.question.question_text }}</p>
+        {% if answer.answer_text %}
+          <p class="text-gray-700 whitespace-pre-wrap">{{ answer.answer_text }}</p>
+        {% elif answer.selected_options %}
+          <ul class="list-disc list-inside text-gray-700">
+            {% for opt in answer.selected_options %}
+            <li>{{ opt }}</li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="text-gray-400 italic">No answer provided</p>
+        {% endif %}
+      </div>
+    {% empty %}
+      {% if response.answers_json.answers %}
+        {% for item in response.answers_json.answers %}
+        <div class="border-l-4 border-purple-300 pl-4 mb-4">
+          <p class="font-medium text-gray-900 mb-2">{{ item.question_text }}</p>
+          {% if item.text %}
+            <p class="text-gray-700 whitespace-pre-wrap">{{ item.text }}</p>
+          {% elif item.option_values %}
+            <ul class="list-disc list-inside text-gray-700">
+              {% for opt in item.option_values %}
+              <li>{{ opt }}</li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="text-gray-400 italic">No answer provided</p>
+          {% endif %}
+        </div>
+        {% endfor %}
+      {% else %}
+        <p class="text-gray-600">No answers recorded.</p>
+      {% endif %}
+    {% endfor %}
+  </div>
+
+  {% if response.answers_json.transcript %}
+  <div class="card">
+    <h2 class="text-xl font-semibold mb-3">Interview transcript</h2>
+    <pre class="bg-gray-50 p-3 rounded overflow-auto text-sm">{{ response.answers_json.transcript }}</pre>
+  </div>
+  {% endif %}
+
+  <div>
+    <a href="{% url 'interviews:detail' response.interview.pk %}" class="btn btn-outline">
+      <i class="fas fa-arrow-left mr-2"></i>Back to interview
+    </a>
+  </div>
+</div>
+{% endblock %}

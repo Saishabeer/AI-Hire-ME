@@ -165,7 +165,7 @@
       const ansEl = qa.querySelector('.answer');
       const text = String((ansEl && ansEl.textContent) || '').trim();
       if (qid > 0) {
-        out.push({ question: qid, text, option_ids: [] });
+        out.push({ question: qid, text, option_values: [] });
       }
     });
     return out;
@@ -197,10 +197,16 @@
         console.error('Failed to submit interview JSON', t);
         return;
       }
+      let data = null;
+      try {
+        data = await resp.json();
+      } catch (_) {
+        data = null;
+      }
       submitted = true;
-      if (responsesUrl) {
-        // Navigate to responses page to confirm persistence
-        window.location.href = responsesUrl;
+      const nextUrl = (data && data.receipt_url) ? data.receipt_url : (responsesUrl || '');
+      if (nextUrl) {
+        window.location.href = nextUrl;
       }
     } catch (e) {
       console.error('Submit error', e);
@@ -265,19 +271,46 @@
       dc = pc.createDataChannel('oai-events');
       dc.onopen = () => {
         log('Data channel open.');
-        // Start immediately; the strict question list is already in the server-side session instructions
-        const startEvent = {
-          type: 'response.create',
-          response: {
-            instructions: 'Start the interview now with question 1.',
-            modalities: ['text', 'audio'],
-          },
-        };
+        // Determine exact first question from UI
+        const firstQA = QA_NODES[0] || null;
+        const firstQText = firstQA ? String(firstQA.querySelector('.bubble-q')?.textContent || '').trim() : '';
+        const prompt = firstQText
+          ? `Ask exactly this question with no greeting, no preamble, no paraphrasing, and do not chain multiple questions: "${firstQText}". Respond only with that question.`
+          : 'Ask the first question from the provided list exactly as written. Respond only with that question.';
+
+        // 0) Update session instructions to force the first utterance verbatim (system-level)
+        const sys = firstQText
+          ? `Your first utterance must be exactly: "${firstQText}". No greeting, no preamble. Ask ONE question per turn only.`
+          : 'Your first utterance must be the first question exactly as written. No greeting, no preamble. Ask ONE question per turn only.';
         try {
-          dc.send(JSON.stringify(startEvent));
+          dc.send(JSON.stringify({ type: 'session.update', session: { instructions: sys } }));
         } catch (e) {
-          log('Failed to send start event', { error: String(e) });
+          log('Failed to send session.update', { error: String(e) });
         }
+
+        // 1) Cancel any pending/implicit responses
+        try {
+          dc.send(JSON.stringify({ type: 'response.cancel' }));
+        } catch (_) {}
+
+
+        // 3) Create the response (text+audio). Small delay to ensure ordering.
+        setTimeout(() => {
+          try {
+            dc.send(JSON.stringify({
+              type: 'response.create',
+              response: {
+                // Force the first utterance to be exactly Q1, no extras.
+                instructions: firstQText
+                  ? `Say exactly: "${firstQText}"`
+                  : 'Say the first question exactly as written.',
+                modalities: ['text', 'audio'],
+              },
+            }));
+          } catch (e) {
+            log('Failed to send response.create', { error: String(e) });
+          }
+        }, 50);
       };
 
       dc.onmessage = (ev) => {
@@ -392,8 +425,47 @@
       if (t.includes('transcription') && t.includes('completed')) {
         const text = textFromAny(msg);
         if (text) {
+          // Record candidate answer and advance pointer
           addChatBubble('user', text);
           acceptUserAnswerAndAdvance(text);
+
+          // Determine the next unanswered question (avoid repeating last question)
+          const nextUnanswered = QA_NODES.find(qa => {
+            const ans = qa.querySelector('.answer');
+            return !ans || String(ans.textContent || '').trim().length === 0;
+          }) || null;
+
+          // If no questions remain unanswered, end and submit
+          if (!nextUnanswered) {
+            endRealtimeInterview();
+            return;
+          }
+
+          // Move pointer to first unanswered and ask it verbatim
+          currentIdx = Math.max(0, QA_NODES.indexOf(nextUnanswered));
+          updateActiveQuestionHighlight();
+
+          const nextQText = String(nextUnanswered.querySelector('.bubble-q')?.textContent || '').trim();
+          if (nextQText && dc && dc.readyState === 'open') {
+            // Cancel any pending output
+            try { dc.send(JSON.stringify({ type: 'response.cancel' })); } catch (_) {}
+
+            // Create a response that speaks the exact next question and nothing else
+            setTimeout(() => {
+              try {
+                dc.send(JSON.stringify({
+                  type: 'response.create',
+                  response: {
+                    // Force exact question only; no greeting, no preamble, no chaining
+                    instructions: `Say exactly: "${nextQText}"`,
+                    modalities: ['text', 'audio'],
+                  },
+                }));
+              } catch (e) {
+                log('Failed to send next response.create', { error: String(e) });
+              }
+            }, 25);
+          }
         }
         return;
       }

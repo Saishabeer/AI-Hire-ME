@@ -63,6 +63,18 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Lint (black, isort, flake8)
+        run: |
+          black --version
+          isort --version
+          flake8 --version
+          black --check .
+          isort --check-only .
+          flake8 .
+
+      - name: Byte-compile sources
+        run: python -m compileall -q .
+
       - name: Django system check
         run: python manage.py check
 
@@ -72,5 +84,5 @@ jobs:
       - name: Verify migrations are up to date
         run: python manage.py makemigrations --check --dry-run
 
-      - name: Run tests (if any)
-        run: python manage.py test -v 2
+      - name: Run tests (including project-level)
+        run: python manage.py test -v 2 tests interviews accounts

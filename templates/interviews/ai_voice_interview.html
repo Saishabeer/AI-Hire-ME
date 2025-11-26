@@ -11,6 +11,8 @@
   data-responses-url="{% if request.user.is_authenticated and request.user == interview.created_by or request.user.is_staff or request.user.is_superuser %}{% url 'interviews:responses' interview.pk %}{% else %}{% url 'interviews:detail' interview.pk %}{% endif %}"
   data-candidate-name="{{ candidate_name|default_if_none:'' }}"
   data-candidate-email="{{ candidate_email|default_if_none:'' }}"
+  data-first-utt-template="{{ first_utterance_tpl }}"
+  data-verbatim-template="{{ verbatim_tpl }}"
   style="display:none"
 ></div>
 <div class="container page">

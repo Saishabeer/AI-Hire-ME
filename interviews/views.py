@@ -20,6 +20,7 @@ from rest_framework.response import Response
 
 from .models import Answer, Candidate, Interview, InterviewResponse, Question, Section
 from .serializers import SubmitResponseSerializer
+from .prompts import build_realtime_instructions, first_utterance_template, verbatim_question_template
 
 
 @require_http_methods(["GET"])
@@ -336,8 +337,8 @@ def interview_take(request, pk):
                 )
 
         # Attach JSON snapshot for easy export/reporting
-        response.answers_json = {'answers': answers_snapshot, 'source': 'form'}
-        response.save(update_fields=['answers_json'])
+        response.answers_transcript = {'answers': answers_snapshot, 'source': 'form'}
+        response.save(update_fields=['answers_transcript'])
 
         messages.success(request, 'Interview submitted successfully!')
         # Redirect owner (and staff/admin) to responses; others to public receipt page
@@ -415,53 +416,7 @@ def realtime_session(request):
 
     model = getattr(settings, "OPENAI_REALTIME_MODEL", os.getenv("OPENAI_REALTIME_MODEL", "gpt-4o-realtime-preview-2024-12-17"))
 
-    # Build strict instructions when an interview is provided
-    if interview:
-        # Compose questions grouped strictly by defined sections (no 'General' bucket)
-        section_lines = []
-        idx = 1
-        try:
-            sections = list(interview.sections.all().order_by("order", "id"))
-        except Exception:
-            sections = []
-        if sections:
-            for s in sections:
-                try:
-                    qtexts = list(
-                        s.questions.all()
-                        .order_by("order", "id")
-                        .values_list("question_text", flat=True)
-                    )
-                except Exception:
-                    qtexts = []
-                section_lines.append(f"Section: {s.title}")
-                if qtexts:
-                    for q in qtexts:
-                        section_lines.append(f"{idx}. {q}")
-                        idx += 1
-                else:
-                    section_lines.append(f"{idx}. (no questions)")
-                    idx += 1
-        questions_block = "\n".join(section_lines) if section_lines else "(No questions configured)"
-
-        instructions = (
-            f"You are conducting a strictly scripted interview for '{interview.title}'. "
-            "Speak ONLY the exact question text provided by HR, in the configured order. "
-            "Do not add greetings, fillers, acknowledgements, confirmations, summaries, or follow‑ups. "
-            "Never invent, rephrase, or substitute any questions. "
-            "Speak exactly one question per turn and nothing else. "
-            "If no next question is provided, remain silent. "
-            "Conclude only after the final question has been asked.\n\n"
-            "Questions (by section):\n"
-            f"{questions_block}"
-        )
-    else:
-        # Generic fallback (less strict if no interview provided)
-        instructions = (
-            "You are a professional interviewer. Start immediately by asking the first question exactly as written, with no greeting, no preamble, and no paraphrasing. "
-            "Ask ONE question per turn only; do not chain multiple questions in a single response. If the candidate interrupts, stop speaking and listen (barge-in). "
-            "Keep responses concise and conversational. Conclude politely when the interview is complete."
-        )
+    instructions = build_realtime_instructions(interview)
 
     voice = getattr(settings, "OPENAI_REALTIME_VOICE", os.getenv("OPENAI_TTS_VOICE", "alloy"))
     transcribe_model = getattr(settings, "OPENAI_TRANSCRIBE_MODEL", os.getenv("OPENAI_TRANSCRIBE_MODEL", "whisper-1"))
@@ -542,6 +497,8 @@ def ai_interview_start(request, pk):
             'candidate_name': (request.GET.get('name') or '').strip(),
             'candidate_email': (request.GET.get('email') or '').strip(),
             'submit_url': reverse('interviews:submit_json', args=[pk]),
+            'first_utterance_tpl': first_utterance_template(),
+            'verbatim_tpl': verbatim_question_template(),
         },
     )
 
@@ -613,7 +570,7 @@ def interview_submit_json(request, pk):
     response = InterviewResponse.objects.create(
         interview=interview,
         candidate=candidate,
-        answers_json={
+        answers_transcript={
             "answers": answers_enriched,
             "transcript": data.get("transcript") or "",
             "source": data.get("source") or "api",

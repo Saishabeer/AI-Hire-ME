@@ -34,8 +34,8 @@
         {% endif %}
       </div>
     {% empty %}
-      {% if response.answers_json.answers %}
-        {% for item in response.answers_json.answers %}
+      {% if response.answers_transcript.answers %}
+        {% for item in response.answers_transcript.answers %}
         <div class="border-l-4 border-purple-300 pl-4 mb-4">
           <p class="font-medium text-gray-900 mb-2">{{ item.question_text }}</p>
           {% if item.text %}
@@ -57,10 +57,10 @@
     {% endfor %}
   </div>
 
-  {% if response.answers_json.transcript %}
+  {% if response.answers_transcript.transcript %}
   <div class="card">
     <h2 class="text-xl font-semibold mb-3">Interview transcript</h2>
-    <pre class="bg-gray-50 p-3 rounded overflow-auto text-sm">{{ response.answers_json.transcript }}</pre>
+    <pre class="bg-gray-50 p-3 rounded overflow-auto text-sm">{{ response.answers_transcript.transcript }}</pre>
   </div>
   {% endif %}
 

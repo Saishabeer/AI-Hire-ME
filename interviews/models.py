@@ -110,8 +110,8 @@ class InterviewResponse(models.Model):
         db_index=True,
     )
     submitted_at = models.DateTimeField(default=timezone.now)
-    # Store a compact JSON snapshot for easy management/exports (answers, transcript, source, etc.)
-    answers_json = models.JSONField(default=dict, blank=True)
+    # JSON snapshot: answers + transcript + source (denormalized for export/render)
+    answers_transcript = models.JSONField(default=dict, blank=True)
 
     class Meta:
         ordering = ['-submitted_at']
@@ -122,6 +122,18 @@ class InterviewResponse(models.Model):
     def __str__(self):
         display_name = self.candidate.full_name if self.candidate else "Unknown"
         return f"{display_name} - {self.interview.title}"
+
+    # Backward compatibility alias for legacy code that still reads/writes answers_json
+    @property
+    def answers_json(self):
+        try:
+            return self.answers_transcript or {}
+        except Exception:
+            return {}
+
+    @answers_json.setter
+    def answers_json(self, value):
+        self.answers_transcript = value
 
 
 class Answer(models.Model):

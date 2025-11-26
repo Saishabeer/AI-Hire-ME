@@ -49,8 +49,8 @@
                         {% endif %}
                     </div>
                     {% endfor %}
-                {% elif response.answers_json.answers %}
-                    {% for item in response.answers_json.answers %}
+                {% elif response.answers_transcript.answers %}
+                    {% for item in response.answers_transcript.answers %}
                     <div class="border-l-4 border-purple-300 pl-4">
                         <p class="font-medium text-gray-900 mb-2">{{ item.question_text }}</p>
                         {% if item.text %}

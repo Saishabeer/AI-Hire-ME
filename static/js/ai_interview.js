@@ -34,6 +34,10 @@
   const responsesUrl = root.dataset.responsesUrl || '';
   const candidateName = root.dataset.candidateName || '';
   const candidateEmail = root.dataset.candidateEmail || '';
+  // Centralized prompt templates provided by server (fallbacks included)
+  const firstUttTpl = root.dataset.firstUttTemplate || 'Your first utterance must be exactly: "${Q}". Output nothing else. Ask ONE question per turn only.';
+  const verbatimTpl = root.dataset.verbatimTemplate || 'Say exactly: "${Q}". Output only that question and nothing else. Do not add any words, prefixes, postfixes, or extra punctuation.';
+  // (templates defined above)
 
   // --- State ---
   let pc = null;
@@ -44,6 +48,8 @@
 
   let paused = false;
   let submitted = false;
+  let isAsking = false;
+  let lastTranscript = "";
 
   // Ordered list of QA DOM nodes across all sections
   const QA_NODES = Array.from(document.querySelectorAll('#collected-info .qa'));
@@ -66,6 +72,17 @@
         console.debug('[AI Interview]', line);
       }
     } catch (_) {}
+  }
+
+
+
+  // Replace ${Q} in a template with the exact question text
+  function fillTpl(tpl, q) {
+    try {
+      return String(tpl || '').replaceAll('${Q}', String(q || ''));
+    } catch (_) {
+      return String(tpl || '');
+    }
   }
 
   function setPill(state) {
@@ -278,31 +295,28 @@
           ? `Ask exactly this question with no greeting, no preamble, no paraphrasing, and do not chain multiple questions: "${firstQText}". Respond only with that question.`
           : 'Ask the first question from the provided list exactly as written. Respond only with that question.';
 
-        // 0) Update session instructions to force the first utterance verbatim (system-level)
-        const sys = firstQText
-          ? `Your first utterance must be exactly: "${firstQText}". No greeting, no preamble. Ask ONE question per turn only.`
-          : 'Your first utterance must be the first question exactly as written. No greeting, no preamble. Ask ONE question per turn only.';
-        try {
-          dc.send(JSON.stringify({ type: 'session.update', session: { instructions: sys } }));
-        } catch (e) {
-          log('Failed to send session.update', { error: String(e) });
-        }
 
-        // 1) Cancel any pending/implicit responses
+        // 0) Set first-utterance hard rule on session (defensive)
         try {
-          dc.send(JSON.stringify({ type: 'response.cancel' }));
+          const sys = firstQText
+            ? fillTpl(firstUttTpl, firstQText)
+            : 'Your first utterance must be the first question exactly as written. Output nothing else. Ask ONE question per turn only.';
+          dc.send(JSON.stringify({ type: 'session.update', session: { instructions: sys } }));
         } catch (_) {}
 
+        // 1) Cancel any pending/implicit responses
+        try { dc.send(JSON.stringify({ type: 'response.cancel' })); } catch (_) {}
 
         // 3) Create the response (text+audio). Small delay to ensure ordering.
         setTimeout(() => {
           try {
+            isAsking = true;
             dc.send(JSON.stringify({
               type: 'response.create',
               response: {
                 // Force the first utterance to be exactly Q1, no extras.
                 instructions: firstQText
-                  ? `Say exactly: "${firstQText}"`
+                  ? fillTpl(verbatimTpl, firstQText)
                   : 'Say the first question exactly as written.',
                 modalities: ['text', 'audio'],
               },
@@ -408,6 +422,31 @@
           if (aiStreamingEl) aiStreamingEl.textContent += chunk;
           lastAIDelta = chunk;
           if (aiStateEl) aiStateEl.textContent = 'speaking';
+
+          // Enforce single-question output: stop generation after first terminator
+          try {
+            const cur = String(aiStreamingEl.textContent || '');
+            const terms = ['?', '!', '.', '।'];
+            let firstIdx = -1;
+            for (const c of terms) {
+              const i = cur.indexOf(c);
+              if (i !== -1 && (firstIdx === -1 || i < firstIdx)) firstIdx = i;
+            }
+            if (firstIdx !== -1) {
+              const after = cur.slice(firstIdx + 1).trim();
+              if (after.length > 0) {
+                // Cancel further output and trim to the first sentence/question
+                try {
+                  if (dc && dc.readyState === 'open') {
+                    dc.send(JSON.stringify({ type: 'response.cancel' }));
+                  }
+                } catch (_) {}
+                aiStreamingEl.textContent = cur.slice(0, firstIdx + 1);
+                if (aiStateEl) aiStateEl.textContent = 'idle';
+              }
+            }
+          } catch (_) {}
+
           scrollToBottom(transcriptListEl);
         }
         return;
@@ -417,6 +456,7 @@
       if (t.includes('response') && t.includes('completed')) {
         aiStreamingEl = null;
         lastAIDelta = "";
+        isAsking = false;
         if (aiStateEl) aiStateEl.textContent = 'idle';
         return;
       }
@@ -425,6 +465,9 @@
       if (t.includes('transcription') && t.includes('completed')) {
         const text = textFromAny(msg);
         if (text) {
+          // Deduplicate repeated transcripts
+          if (text === lastTranscript) return;
+          lastTranscript = text;
           // Record candidate answer and advance pointer
           addChatBubble('user', text);
           acceptUserAnswerAndAdvance(text);
@@ -446,18 +489,19 @@
           updateActiveQuestionHighlight();
 
           const nextQText = String(nextUnanswered.querySelector('.bubble-q')?.textContent || '').trim();
-          if (nextQText && dc && dc.readyState === 'open') {
+          if (nextQText && dc && dc.readyState === 'open' && !isAsking) {
             // Cancel any pending output
             try { dc.send(JSON.stringify({ type: 'response.cancel' })); } catch (_) {}
 
             // Create a response that speaks the exact next question and nothing else
             setTimeout(() => {
               try {
+                isAsking = true;
                 dc.send(JSON.stringify({
                   type: 'response.create',
                   response: {
                     // Force exact question only; no greeting, no preamble, no chaining
-                    instructions: `Say exactly: "${nextQText}"`,
+                    instructions: fillTpl(verbatimTpl, nextQText),
                     modalities: ['text', 'audio'],
                   },
                 }));

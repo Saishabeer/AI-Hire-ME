@@ -50,6 +50,9 @@
   let submitted = false;
   let isAsking = false;
   let lastTranscript = "";
+  let expectedQ = "";
+  let allowGreeting = false;
+  let aiAccum = "";
 
   // Ordered list of QA DOM nodes across all sections
   const QA_NODES = Array.from(document.querySelectorAll('#collected-info .qa'));
@@ -126,10 +129,94 @@
     if (!transcriptListEl) return null;
     const row = document.createElement('div');
     row.className = role === 'ai' ? 'bubble bubble-ai align-left' : 'bubble bubble-user align-right';
-    row.textContent = initialText || '';
+    const label = role === 'ai' ? 'AI: ' : 'You: ';
+    row.textContent = label + (initialText || '');
     transcriptListEl.appendChild(row);
     scrollToBottom(transcriptListEl);
     return row;
+  }
+
+// Toggle microphone tracks
+function setMicEnabled(enabled) {
+  try {
+    const tracks = (localStream && localStream.getAudioTracks && localStream.getAudioTracks()) || [];
+    tracks.forEach(t => t.enabled = !!enabled);
+    if (micStateEl) micStateEl.textContent = enabled ? 'on' : 'muted';
+  } catch (_) {}
+}
+
+// Normalize text for echo checks
+function normalizeText(s) {
+  try {
+    return String(s || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9\\s]/g, '')
+      .replace(/\\s+/g, ' ')
+      .trim();
+  } catch (_) { return String(s || ''); }
+}
+  // Toggle microphone tracks
+  function setMicEnabled(enabled) {
+    try {
+      const tracks = (localStream && localStream.getAudioTracks && localStream.getAudioTracks()) || [];
+      tracks.forEach(t => t.enabled = !!enabled);
+      if (micStateEl) micStateEl.textContent = enabled ? 'on' : 'muted';
+    } catch (_) {}
+  }
+
+  // Normalize text for echo checks
+  function normalizeText(s) {
+    try {
+      return String(s || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    } catch (_) { return String(s || ''); }
+  }
+
+  // Toggle microphone tracks
+  function setMicEnabled(enabled) {
+    try {
+      const tracks = (localStream && localStream.getAudioTracks && localStream.getAudioTracks()) || [];
+      tracks.forEach(t => t.enabled = !!enabled);
+      if (micStateEl) micStateEl.textContent = enabled ? 'on' : 'muted';
+    } catch (_) {}
+  }
+
+  // Normalize text for echo checks
+  function normalizeText(s) {
+    try {
+      return String(s || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    } catch (_) { return String(s || ''); }
+  }
+
+  // Local English TTS for greeting + verbatim HR questions (mutes mic during TTS)
+  function speakText(text, onend) {
+    try {
+      setMicEnabled(false);
+      const utter = new SpeechSynthesisUtterance(String(text || ''));
+      utter.lang = 'en-US';
+      utter.rate = 1.0;
+      utter.pitch = 1.0;
+      const voices = (window.speechSynthesis && window.speechSynthesis.getVoices && window.speechSynthesis.getVoices()) || [];
+      const enVoice = voices.find(v => (v.lang || '').toLowerCase().startsWith('en')) || voices[0] || null;
+      if (enVoice) utter.voice = enVoice;
+      utter.onend = () => {
+        try {
+          setTimeout(() => setMicEnabled(true), 1000);
+          if (typeof onend === 'function') onend();
+        } catch (_) {}
+      };
+      window.speechSynthesis.speak(utter);
+    } catch (e) {
+      console.error('Local TTS error', e);
+      try { setMicEnabled(true); if (typeof onend === 'function') onend(); } catch (_) {}
+    }
   }
 
   function updateActiveQuestionHighlight() {
@@ -256,7 +343,13 @@
       log('Ephemeral session created', { model: modelInUse });
 
       // Get mic once
-      localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      localStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: false,
+        }
+      });
       if (micStateEl) micStateEl.textContent = 'on';
 
       // Peer connection
@@ -307,22 +400,18 @@
         // 1) Cancel any pending/implicit responses
         try { dc.send(JSON.stringify({ type: 'response.cancel' })); } catch (_) {}
 
-        // 3) Create the response (text+audio). Small delay to ensure ordering.
+        // 3) Create the response (audio only). Small delay to ensure ordering.
         setTimeout(() => {
           try {
+            const greeting = "Hello, let's begin.";
+            expectedQ = firstQText || '';
+            allowGreeting = true;
+            const display = expectedQ ? (greeting + ' ' + expectedQ) : greeting;
+            addChatBubble('ai', display);
             isAsking = true;
-            dc.send(JSON.stringify({
-              type: 'response.create',
-              response: {
-                // Force the first utterance to be exactly Q1, no extras.
-                instructions: firstQText
-                  ? fillTpl(verbatimTpl, firstQText)
-                  : 'Say the first question exactly as written.',
-                modalities: ['text', 'audio'],
-              },
-            }));
+            speakText(display, () => { isAsking = false; });
           } catch (e) {
-            log('Failed to send response.create', { error: String(e) });
+            log('Failed to start local TTS', { error: String(e) });
           }
         }, 50);
       };
@@ -413,42 +502,14 @@
     // - conversation.item.input_audio_transcription.completed { transcript: "..." }
     try {
       const t = (msg.type || '').toLowerCase();
+      // Ignore any model-generated text deltas; client controls AI transcript output
+      if (t.includes('response') && t.includes('delta')) {
+        return;
+      }
 
       // AI streaming text (delta-based)
       if (t.includes('response') && t.includes('delta')) {
-        const chunk = textFromAny(msg);
-        if (chunk && chunk !== lastAIDelta) {
-          if (!aiStreamingEl) aiStreamingEl = addChatBubble('ai', '');
-          if (aiStreamingEl) aiStreamingEl.textContent += chunk;
-          lastAIDelta = chunk;
-          if (aiStateEl) aiStateEl.textContent = 'speaking';
-
-          // Enforce single-question output: stop generation after first terminator
-          try {
-            const cur = String(aiStreamingEl.textContent || '');
-            const terms = ['?', '!', '.', '।'];
-            let firstIdx = -1;
-            for (const c of terms) {
-              const i = cur.indexOf(c);
-              if (i !== -1 && (firstIdx === -1 || i < firstIdx)) firstIdx = i;
-            }
-            if (firstIdx !== -1) {
-              const after = cur.slice(firstIdx + 1).trim();
-              if (after.length > 0) {
-                // Cancel further output and trim to the first sentence/question
-                try {
-                  if (dc && dc.readyState === 'open') {
-                    dc.send(JSON.stringify({ type: 'response.cancel' }));
-                  }
-                } catch (_) {}
-                aiStreamingEl.textContent = cur.slice(0, firstIdx + 1);
-                if (aiStateEl) aiStateEl.textContent = 'idle';
-              }
-            }
-          } catch (_) {}
-
-          scrollToBottom(transcriptListEl);
-        }
+        // Ignore model deltas completely; client controls transcript output
         return;
       }
 
@@ -465,8 +526,16 @@
       if (t.includes('transcription') && t.includes('completed')) {
         const text = textFromAny(msg);
         if (text) {
+          // Ignore while AI is speaking (prevents echo of our own TTS)
+          if (isAsking) return;
           // Deduplicate repeated transcripts
           if (text === lastTranscript) return;
+          // Ignore echo of AI question (e.g., mic captured speaker output)
+          const nText = normalizeText(text);
+          const nExpected = normalizeText(expectedQ);
+          if (nExpected && (nText === nExpected || nText.includes(nExpected))) {
+            return;
+          }
           lastTranscript = text;
           // Record candidate answer and advance pointer
           addChatBubble('user', text);
@@ -496,17 +565,13 @@
             // Create a response that speaks the exact next question and nothing else
             setTimeout(() => {
               try {
+                expectedQ = nextQText;
+                const display = expectedQ;
+                addChatBubble('ai', display);
                 isAsking = true;
-                dc.send(JSON.stringify({
-                  type: 'response.create',
-                  response: {
-                    // Force exact question only; no greeting, no preamble, no chaining
-                    instructions: fillTpl(verbatimTpl, nextQText),
-                    modalities: ['text', 'audio'],
-                  },
-                }));
+                speakText(display, () => { isAsking = false; });
               } catch (e) {
-                log('Failed to send next response.create', { error: String(e) });
+                log('Failed to start local TTS for next question', { error: String(e) });
               }
             }, 25);
           }
@@ -554,6 +619,24 @@
     // No autostart; wait for explicit Connect
     setPill('disconnected');
     if (connStateEl) connStateEl.textContent = 'idle';
+
+    // Guard: no questions configured
+    if (QA_NODES.length === 0) {
+      addChatBubble('ai', 'No questions are configured for this interview.');
+      if (connectBtn) connectBtn.disabled = true;
+      if (connStateEl) connStateEl.textContent = 'no-questions';
+      return;
+    }
+
+    // Attempt to auto-start the interview so AI initiates the first question
+    // If the browser blocks mic without user gesture, the Connect button remains available as fallback.
+    setTimeout(() => {
+      try {
+        if (connectBtn && !connectBtn.disabled) {
+          startRealtimeInterview();
+        }
+      } catch (_) {}
+    }, 350);
   }
 
   if (document.readyState === 'loading') {

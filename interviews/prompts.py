@@ -40,12 +40,13 @@ def build_realtime_instructions(interview=None) -> str:
             f"You are conducting a strictly scripted interview for '{interview.title}'. "
             "Follow these hard rules:\n"
             "0) Do not speak or produce any output unless explicitly requested via a response.create event.\n"
-            "1) Speak ONLY the exact question text provided by HR, in the configured order.\n"
-            "2) Ask EXACTLY one question per turn and output nothing except the question text.\n"
-            "3) Do NOT add greetings, acknowledgements, summaries, follow-ups, or filler words.\n"
-            "4) Never rephrase, paraphrase, or invent new questions.\n"
-            "5) If no next question is provided, remain silent.\n"
-            "6) Conclude only after the final question has been asked.\n\n"
+            "1) Speak ONLY in English.\n"
+            "2) Speak ONLY the exact question text provided by HR, in the configured order.\n"
+            "3) Ask EXACTLY one question per turn and output nothing except the question text.\n"
+            "4) Do NOT add greetings, acknowledgements, summaries, follow-ups, or filler words.\n"
+            "5) Never rephrase, paraphrase, translate, or invent new questions.\n"
+            "6) If no next question is provided, remain silent.\n"
+            "7) Conclude only after the final question has been asked.\n\n"
             "Questions (by section):\n"
             f"{qb}"
         )
@@ -54,11 +55,12 @@ def build_realtime_instructions(interview=None) -> str:
     return (
         "You are a professional interviewer. Follow these hard rules:\n"
         "0) Do not speak or produce any output unless explicitly requested via a response.create event.\n"
-        "1) When prompted, ask the first question exactly as written, with no greeting or preamble.\n"
-        "2) Ask EXACTLY one question per turn and output nothing except the question text.\n"
-        "3) Do NOT add acknowledgements, summaries, or follow-ups.\n"
-        "4) Never rephrase, paraphrase, or invent new questions.\n"
-        "5) Conclude only after the final question has been asked."
+        "1) Speak ONLY in English.\n"
+        "2) When prompted, ask the first question exactly as written, with no greeting or preamble.\n"
+        "3) Ask EXACTLY one question per turn and output nothing except the question text.\n"
+        "4) Do NOT add acknowledgements, summaries, or follow-ups.\n"
+        "5) Never rephrase, paraphrase, translate, or invent new questions.\n"
+        "6) Conclude only after the final question has been asked."
     )
 
 
@@ -67,15 +69,16 @@ def verbatim_question_template() -> str:
     Template used client-side to force the model to speak only the exact question text.
     ${Q} will be replaced with the exact question string on the JS side.
     """
-    return 'Say exactly: "${Q}"'
+    return 'Say exactly: "${Q}". Speak ONLY in English. Output only that question and nothing else. Do not add any words, prefixes, postfixes, or extra punctuation.'
 
 
 def first_utterance_template() -> str:
     """
-    Template used to enforce the very first model utterance (no greeting/preamble).
+    Template for the very first model utterance.
     ${Q} will be replaced with the exact first question string on the JS side.
+    The first utterance MUST start with a brief English greeting and then ask the first question verbatim.
     """
-    return 'Your first utterance must be exactly: "${Q}". Output nothing else. Ask ONE question per turn only.'
+    return 'Start with a brief English greeting (e.g., "Hello, let\'s begin.") then ask exactly: "${Q}". Speak ONLY in English. Do not add anything else after the question. Ask ONE question per turn only.'
 
 
 __all__ = [

@@ -424,9 +424,10 @@ def realtime_session(request):
     payload = {
         "model": model,
         "voice": voice,
-        "modalities": ["text", "audio"],
+        # SILENT transcriber: no model audio output; client does TTS for questions
+        "modalities": ["text"],
         # Enable server-side speech-to-text so we can show user's transcript in the UI
-        "input_audio_transcription": {"model": transcribe_model},
+        "input_audio_transcription": {"model": transcribe_model, "language": "en"},
         "turn_detection": {
             "type": "server_vad",
             "threshold": 0.5,
@@ -523,7 +524,7 @@ def interview_submit_json(request, pk):
     Notes:
     - For multiple_choice questions, each entry in option_values must match one of the question's configured options (by value, not id).
     - Text answers are always accepted; option_values is optional.
-    Persists a Candidate, InterviewResponse (with answers_json snapshot), and
+    Persists a Candidate, InterviewResponse (with answers_transcript snapshot), and
     materializes Answer rows for manageability and reporting.
     """
     interview = get_object_or_404(Interview, pk=pk, is_active=True)

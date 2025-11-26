@@ -1,7 +1,6 @@
 import json
 import os
 import urllib.error
-import urllib.parse
 import urllib.request
 
 from django.conf import settings
@@ -19,8 +18,12 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from .models import Answer, Candidate, Interview, InterviewResponse, Question, Section
+from .prompts import (
+    build_realtime_instructions,
+    first_utterance_template,
+    verbatim_question_template,
+)
 from .serializers import SubmitResponseSerializer
-from .prompts import build_realtime_instructions, first_utterance_template, verbatim_question_template
 
 
 @require_http_methods(["GET"])
@@ -232,7 +235,6 @@ def interview_edit(request, pk):
     # Ensure at least one section exists; if none, create a default
     if interview.sections.count() == 0:
         Section.objects.create(interview=interview, title="Section 1", order=0)
-    first_sec = interview.sections.order_by("order", "id").first()
 
     context = {
         'interview': interview,
@@ -378,7 +380,9 @@ def interview_response_view(request, rid):
     Public receipt page showing a single candidate's submission.
     """
     resp = get_object_or_404(
-        InterviewResponse.objects.select_related("interview", "candidate").prefetch_related("answers__question"),
+        InterviewResponse.objects.select_related("interview", "candidate").prefetch_related(
+            "answers__question"
+        ),
         pk=rid,
     )
     return render(request, 'interviews/response_detail.html', {'response': resp})
@@ -414,12 +418,24 @@ def realtime_session(request):
         # If body can't be parsed, continue with generic behavior
         interview = None
 
-    model = getattr(settings, "OPENAI_REALTIME_MODEL", os.getenv("OPENAI_REALTIME_MODEL", "gpt-4o-realtime-preview-2024-12-17"))
+    model = getattr(
+        settings,
+        "OPENAI_REALTIME_MODEL",
+        os.getenv("OPENAI_REALTIME_MODEL", "gpt-4o-realtime-preview-2024-12-17"),
+    )
 
     instructions = build_realtime_instructions(interview)
 
-    voice = getattr(settings, "OPENAI_REALTIME_VOICE", os.getenv("OPENAI_TTS_VOICE", "alloy"))
-    transcribe_model = getattr(settings, "OPENAI_TRANSCRIBE_MODEL", os.getenv("OPENAI_TRANSCRIBE_MODEL", "whisper-1"))
+    voice = getattr(
+        settings,
+        "OPENAI_REALTIME_VOICE",
+        os.getenv("OPENAI_TTS_VOICE", "alloy"),
+    )
+    transcribe_model = getattr(
+        settings,
+        "OPENAI_TRANSCRIBE_MODEL",
+        os.getenv("OPENAI_TRANSCRIBE_MODEL", "whisper-1"),
+    )
 
     payload = {
         "model": model,
@@ -430,9 +446,9 @@ def realtime_session(request):
         "input_audio_transcription": {"model": transcribe_model, "language": "en"},
         "turn_detection": {
             "type": "server_vad",
-            "threshold": 0.5,
-            "prefix_padding_ms": 300,
-            "silence_duration_ms": 400,
+            "threshold": 0.45,
+            "prefix_padding_ms": 120,
+            "silence_duration_ms": 220,
         },
         "instructions": instructions,
     }

@@ -69,7 +69,11 @@ def verbatim_question_template() -> str:
     Template used client-side to force the model to speak only the exact question text.
     ${Q} will be replaced with the exact question string on the JS side.
     """
-    return 'Say exactly: "${Q}". Speak ONLY in English. Output only that question and nothing else. Do not add any words, prefixes, postfixes, or extra punctuation.'
+    return (
+        'Say exactly: "${Q}". Speak ONLY in English. '
+        "Output only that question and nothing else. "
+        "Do not add any words, prefixes, postfixes, or extra punctuation."
+    )
 
 
 def first_utterance_template() -> str:
@@ -78,7 +82,13 @@ def first_utterance_template() -> str:
     ${Q} will be replaced with the exact first question string on the JS side.
     The first utterance MUST start with a brief English greeting and then ask the first question verbatim.
     """
-    return 'Start with a brief English greeting (e.g., "Hello, let\'s begin.") then ask exactly: "${Q}". Speak ONLY in English. Do not add anything else after the question. Ask ONE question per turn only.'
+    return (
+        'Start with a brief English greeting (e.g., "Hello, let\'s begin.") '
+        'then ask exactly: "${Q}". '
+        "Speak ONLY in English. "
+        "Do not add anything else after the question. "
+        "Ask ONE question per turn only."
+    )
 
 
 __all__ = [

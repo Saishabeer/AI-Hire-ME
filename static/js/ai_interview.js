@@ -208,7 +208,7 @@ function normalizeText(s) {
       if (enVoice) utter.voice = enVoice;
       utter.onend = () => {
         try {
-          setTimeout(() => setMicEnabled(true), 1000);
+          setMicEnabled(true);
           if (typeof onend === 'function') onend();
         } catch (_) {}
       };
@@ -348,6 +348,9 @@ function normalizeText(s) {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: false,
+          channelCount: 1,
+          sampleRate: 16000,
+          sampleSize: 16,
         }
       });
       if (micStateEl) micStateEl.textContent = 'on';
@@ -400,20 +403,18 @@ function normalizeText(s) {
         // 1) Cancel any pending/implicit responses
         try { dc.send(JSON.stringify({ type: 'response.cancel' })); } catch (_) {}
 
-        // 3) Create the response (audio only). Small delay to ensure ordering.
-        setTimeout(() => {
-          try {
-            const greeting = "Hello, let's begin.";
-            expectedQ = firstQText || '';
-            allowGreeting = true;
-            const display = expectedQ ? (greeting + ' ' + expectedQ) : greeting;
-            addChatBubble('ai', display);
-            isAsking = true;
-            speakText(display, () => { isAsking = false; });
-          } catch (e) {
-            log('Failed to start local TTS', { error: String(e) });
-          }
-        }, 50);
+        // 3) Speak immediately (no delay) for natural turn-taking
+        try {
+          const greeting = "Hello, let's begin.";
+          expectedQ = firstQText || '';
+          allowGreeting = true;
+          const display = expectedQ ? (greeting + ' ' + expectedQ) : greeting;
+          addChatBubble('ai', display);
+          isAsking = true;
+          speakText(display, () => { isAsking = false; });
+        } catch (e) {
+          log('Failed to start local TTS', { error: String(e) });
+        }
       };
 
       dc.onmessage = (ev) => {
@@ -502,6 +503,16 @@ function normalizeText(s) {
     // - conversation.item.input_audio_transcription.completed { transcript: "..." }
     try {
       const t = (msg.type || '').toLowerCase();
+      // Barge-in: if user transcription deltas arrive while AI is speaking, cancel local TTS immediately
+      if (t.includes('transcription') && t.includes('delta')) {
+        if (isAsking) {
+          try { window.speechSynthesis.cancel(); } catch (_) {}
+          isAsking = false;
+          setMicEnabled(true);
+        }
+        // Ignore delta rendering; we wait for 'transcription.completed'
+        return;
+      }
       // Ignore any model-generated text deltas; client controls AI transcript output
       if (t.includes('response') && t.includes('delta')) {
         return;
@@ -563,17 +574,15 @@ function normalizeText(s) {
             try { dc.send(JSON.stringify({ type: 'response.cancel' })); } catch (_) {}
 
             // Create a response that speaks the exact next question and nothing else
-            setTimeout(() => {
-              try {
-                expectedQ = nextQText;
-                const display = expectedQ;
-                addChatBubble('ai', display);
-                isAsking = true;
-                speakText(display, () => { isAsking = false; });
-              } catch (e) {
-                log('Failed to start local TTS for next question', { error: String(e) });
-              }
-            }, 25);
+            try {
+              expectedQ = nextQText;
+              const display = expectedQ;
+              addChatBubble('ai', display);
+              isAsking = true;
+              speakText(display, () => { isAsking = false; });
+            } catch (e) {
+              log('Failed to start local TTS for next question', { error: String(e) });
+            }
           }
         }
         return;
@@ -628,15 +637,13 @@ function normalizeText(s) {
       return;
     }
 
-    // Attempt to auto-start the interview so AI initiates the first question
+    // Attempt to auto-start immediately so AI initiates the first question
     // If the browser blocks mic without user gesture, the Connect button remains available as fallback.
-    setTimeout(() => {
-      try {
-        if (connectBtn && !connectBtn.disabled) {
-          startRealtimeInterview();
-        }
-      } catch (_) {}
-    }, 350);
+    try {
+      if (connectBtn && !connectBtn.disabled) {
+        startRealtimeInterview();
+      }
+    } catch (_) {}
   }
 
   if (document.readyState === 'loading') {
